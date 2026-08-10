@@ -2,24 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Realtime RPG Square Land Map - Full Terrain</title>
+  <!-- 1. CRITICAL FOR MOBILE: Fixes tiny microscopic text and viewport zoom -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Realtime RPG Square Land Map</title>
   
-  <!-- 1. Free MapLibre Renderer -->
   <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
 
   <style>
-    body { margin: 0; padding: 0; background-color: #0d1117; font-family: sans-serif; }
+    body { margin: 0; padding: 0; background-color: #0d1117; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    
+    /* Mobile-optimized responsive UI overlay */
     #ui-panel {
-      position: absolute; top: 15px; left: 15px; z-index: 10;
-      background: rgba(13, 17, 23, 0.9); color: #e6edf3;
-      padding: 12px 18px; border-radius: 8px; border: 1px solid #30363d;
-      max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
+      background: rgba(13, 17, 23, 0.92); color: #e6edf3;
+      padding: 14px 18px; border-radius: 12px; border: 1px solid #30363d;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      font-size: 15px;
     }
+    #ui-panel h3 { margin: 0 0 6px 0; font-size: 18px; }
+    #status { font-size: 14px; color: #38bdf8; }
+    #plot-info { margin-top: 8px; font-size: 14px; line-height: 1.4; }
+
     .badge {
-      display: inline-block; padding: 2px 8px; font-size: 11px;
-      border-radius: 4px; font-weight: bold; margin-top: 4px;
+      display: inline-block; padding: 3px 10px; font-size: 12px;
+      border-radius: 6px; font-weight: bold; margin-top: 4px;
     }
     .claimed { background-color: #2563eb; color: #fff; }
     .wild { background-color: #10b981; color: #fff; }
@@ -28,9 +36,9 @@
 <body>
 
 <div id="ui-panel">
-  <h3 style="margin: 0 0 5px 0;">⚔️ GPS Land Claimer</h3>
+  <h3>⚔️ GPS Land Claimer</h3>
   <div id="status">Acquiring GPS Signal...</div>
-  <div id="plot-info" style="margin-top: 8px; font-size: 13px;"></div>
+  <div id="plot-info"></div>
 </div>
 
 <div id="map"></div>
@@ -39,7 +47,6 @@
   let userLat = 40.7128;
   let userLng = -74.006;
 
-  // CARTO Voyager Style: Shows ALL OSM natural features (forests, woods, parks, lakes, creeks, trails)
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -47,7 +54,6 @@
     zoom: 16
   });
 
-  // Realtime GPS Control
   const geolocate = new maplibregl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true },
     trackUserLocation: true,
@@ -104,16 +110,26 @@
   }
 
   map.on('load', () => {
+    // 2. Increase text size across map street and park labels for high-DPI phone screens
+    map.getStyle().layers.forEach(layer => {
+      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+        map.setLayoutProperty(layer.id, 'text-size', [
+          'interpolate', ['linear'], ['zoom'],
+          10, 14,
+          16, 20
+        ]);
+      }
+    });
+
     geolocate.trigger();
 
     const initialFeatures = generateSquareGrid(userLat, userLng);
 
     map.addSource('square-plots', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features: features = initialFeatures }
+      data: { type: 'FeatureCollection', features: initialFeatures }
     });
 
-    // Square Grid Layer (Blue = Home Base, Green = Unclaimed Land)
     map.addLayer({
       id: 'plots-fill',
       type: 'fill',
@@ -130,12 +146,12 @@
       source: 'square-plots',
       paint: {
         'line-color': '#1e293b',
-        'line-width': 1.5,
+        'line-width': 2,
         'line-opacity': 0.7
       }
     });
 
-    // Update grid dynamically on GPS movement
+    // Successful Location Tracking
     geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
@@ -147,6 +163,14 @@
         type: 'FeatureCollection',
         features: updatedFeatures
       });
+    });
+
+    // Mobile GPS Error Handler
+    geolocate.on('error', (e) => {
+      console.error('GPS Error:', e);
+      document.getElementById('status').innerHTML = 
+        `<span style="color:#ef4444;">⚠️ Location Blocked:</span> ${e.message}<br/>` +
+        `<small style="color:#cbd5e1;">Mobile requires <b>HTTPS://</b> or GitHub Pages to allow GPS!</small>`;
     });
 
     // Inspect Plots
