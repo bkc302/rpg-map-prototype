@@ -23,12 +23,16 @@
     #status { font-size: 14px; color: #38bdf8; margin-bottom: 8px; }
     #plot-info { margin-top: 8px; font-size: 14px; line-height: 1.4; }
 
-    .gps-btn {
-      width: 100%; padding: 10px; background-color: #2563eb; color: white;
+    .btn {
+      width: 100%; padding: 10px; color: white;
       border: none; border-radius: 8px; font-weight: bold; font-size: 14px;
-      cursor: pointer; margin-top: 4px;
+      cursor: pointer; margin-top: 6px;
     }
+    .gps-btn { background-color: #2563eb; }
     .gps-btn:active { background-color: #1d4ed8; }
+    
+    .recenter-btn { background-color: #334155; }
+    .recenter-btn:active { background-color: #1e293b; }
 
     .badge {
       display: inline-block; padding: 3px 10px; font-size: 12px;
@@ -43,7 +47,8 @@
 <div id="ui-panel">
   <h3>⚔️ GPS Land Claimer</h3>
   <div id="status">Tap button below to lock GPS</div>
-  <button id="gps-button" class="gps-btn">📍 Find My Location</button>
+  <button id="gps-button" class="btn gps-btn">📍 Find My Location</button>
+  <button id="recenter-button" class="btn recenter-btn" style="display: none;">🎯 Recenter Map</button>
   <div id="plot-info"></div>
 </div>
 
@@ -60,12 +65,11 @@
     zoom: 16
   });
 
-  // Geolocate Control with Timeout & Accuracy Fallbacks
   const geolocate = new maplibregl.GeolocateControl({
     positionOptions: { 
       enableHighAccuracy: true,
-      timeout: 10000,    // Give phone 10 seconds to acquire GPS lock
-      maximumAge: 0      // Always get fresh coordinates
+      timeout: 10000,
+      maximumAge: 0
     },
     trackUserLocation: true,
     showAccuracyCircle: true
@@ -73,15 +77,25 @@
 
   map.addControl(geolocate);
 
-  const PLOT_SIZE = 0.0005; // ~50m x 50m plots
+  // ~50 meters North-South
+  const PLOT_SIZE_LAT = 0.00045; 
+
+  // Dynamically calculate E-W degree delta to ensure true 1:1 square aspect ratio
+  function getPlotDimensions(lat) {
+    const rad = lat * Math.PI / 180;
+    const plotSizeLng = PLOT_SIZE_LAT / Math.cos(rad);
+    return { latSize: PLOT_SIZE_LAT, lngSize: plotSizeLng };
+  }
 
   function getSquarePlotCoordinates(lat, lng) {
-    const minLat = Math.floor(lat / PLOT_SIZE) * PLOT_SIZE;
-    const maxLat = minLat + PLOT_SIZE;
-    const minLng = Math.floor(lng / PLOT_SIZE) * PLOT_SIZE;
-    const maxLng = minLng + PLOT_SIZE;
+    const { latSize, lngSize } = getPlotDimensions(lat);
 
-    const plotId = `plot_${minLat.toFixed(4)}_${minLng.toFixed(4)}`;
+    const minLat = Math.floor(lat / latSize) * latSize;
+    const maxLat = minLat + latSize;
+    const minLng = Math.floor(lng / lngSize) * lngSize;
+    const maxLng = minLng + lngSize;
+
+    const plotId = `plot_${minLat.toFixed(5)}_${minLng.toFixed(5)}`;
 
     const coordinates = [[
       [minLng, minLat],
@@ -96,12 +110,13 @@
 
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
-    const gridRadius = 3;
+    const gridRadius = 4;
+    const { latSize, lngSize } = getPlotDimensions(centerLat);
 
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        const targetLat = centerLat + (y * PLOT_SIZE);
-        const targetLng = centerLng + (x * PLOT_SIZE);
+        const targetLat = centerLat + (y * latSize);
+        const targetLng = centerLng + (x * lngSize);
         const { plotId, coordinates } = getSquarePlotCoordinates(targetLat, targetLng);
 
         const isCurrentStandingPlot = (x === 0 && y === 0);
@@ -159,10 +174,19 @@
       }
     });
 
-    // Tap button to manually trigger GPS (Satisfies Chrome User-Gesture Policy)
+    // Tap button to manually trigger GPS
     document.getElementById('gps-button').addEventListener('click', () => {
       document.getElementById('status').innerText = '⌛ Acquiring GPS fix...';
       geolocate.trigger();
+    });
+
+    // Tap button to recenter camera onto player GPS
+    document.getElementById('recenter-button').addEventListener('click', () => {
+      map.flyTo({
+        center: [userLng, userLat],
+        zoom: 16,
+        essential: true
+      });
     });
 
     // Successful Location Tracking
@@ -171,7 +195,8 @@
       userLng = e.coords.longitude;
 
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
-      document.getElementById('gps-button').style.display = 'none'; // Hide button once connected
+      document.getElementById('gps-button').style.display = 'none';
+      document.getElementById('recenter-button').style.display = 'block'; // Show recenter button
 
       const updatedFeatures = generateSquareGrid(userLat, userLng);
       map.getSource('square-plots').setData({
