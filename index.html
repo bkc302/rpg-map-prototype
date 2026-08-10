@@ -83,55 +83,56 @@
   // ~50 meters North-South
   const PLOT_SIZE_LAT = 0.00045; 
 
-  // Dynamically calculate E-W degree delta to ensure true 1:1 square aspect ratio
-  function getPlotDimensions(lat) {
+  // Calculate standard E-W longitude size for 1:1 aspect ratio at target latitude
+  function getLngSize(lat) {
     const rad = lat * Math.PI / 180;
-    const plotSizeLng = PLOT_SIZE_LAT / Math.cos(rad);
-    return { latSize: PLOT_SIZE_LAT, lngSize: plotSizeLng };
+    return PLOT_SIZE_LAT / Math.cos(rad);
   }
 
-  function getSquarePlotCoordinates(lat, lng) {
-    const { latSize, lngSize } = getPlotDimensions(lat);
+  // Create a polygon feature using precise integer grid boundaries
+  function createPlotFeature(gridX, gridY, lngSize, playerGridX, playerGridY) {
+    const minLat = gridY * PLOT_SIZE_LAT;
+    const maxLat = (gridY + 1) * PLOT_SIZE_LAT;
+    const minLng = gridX * lngSize;
+    const maxLng = (gridX + 1) * lngSize;
 
-    const minLat = Math.floor(lat / latSize) * latSize;
-    const maxLat = minLat + latSize;
-    const minLng = Math.floor(lng / lngSize) * lngSize;
-    const maxLng = minLng + lngSize;
+    const plotId = `plot_${gridY}_${gridX}`;
+    const isClaimed = (gridX === playerGridX && gridY === playerGridY);
 
-    const plotId = `plot_${minLat.toFixed(5)}_${minLng.toFixed(5)}`;
-
-    const coordinates = [[
-      [minLng, minLat],
-      [maxLng, minLat],
-      [maxLng, maxLat],
-      [minLng, maxLat],
-      [minLng, minLat]
-    ]];
-
-    return { plotId, coordinates };
+    return {
+      type: 'Feature',
+      properties: {
+        plotId: plotId,
+        isClaimed: isClaimed
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [minLng, minLat],
+          [maxLng, minLat],
+          [maxLng, maxLat],
+          [minLng, maxLat],
+          [minLng, minLat]
+        ]]
+      }
+    };
   }
 
+  // Generate seamless grid surrounding player integer grid tile
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
     const gridRadius = 4;
-    const { latSize, lngSize } = getPlotDimensions(centerLat);
+    const lngSize = getLngSize(centerLat);
+
+    // Convert GPS float coordinates into discrete integer grid indices
+    const playerGridY = Math.floor(centerLat / PLOT_SIZE_LAT);
+    const playerGridX = Math.floor(centerLng / lngSize);
 
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        const targetLat = centerLat + (y * latSize);
-        const targetLng = centerLng + (x * lngSize);
-        const { plotId, coordinates } = getSquarePlotCoordinates(targetLat, targetLng);
-
-        const isCurrentStandingPlot = (x === 0 && y === 0);
-
-        features.push({
-          type: 'Feature',
-          properties: {
-            plotId: plotId,
-            isClaimed: isCurrentStandingPlot
-          },
-          geometry: { type: 'Polygon', coordinates: coordinates }
-        });
+        const gridX = playerGridX + x;
+        const gridY = playerGridY + y;
+        features.push(createPlotFeature(gridX, gridY, lngSize, playerGridX, playerGridY));
       }
     }
     return features;
