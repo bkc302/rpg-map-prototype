@@ -30,12 +30,17 @@
       width: 100%; padding: 10px; color: white;
       border: none; border-radius: 8px; font-weight: bold; font-size: 14px;
       cursor: pointer; margin-top: 6px;
+      transition: background-color 0.2s ease;
     }
     .gps-btn { background-color: #2563eb; }
     .gps-btn:active { background-color: #1d4ed8; }
     
-    .recenter-btn { background-color: #334155; }
-    .recenter-btn:active { background-color: #1e293b; }
+    /* Toggle Button States */
+    .autocenter-on { background-color: #16a34a; }
+    .autocenter-on:active { background-color: #15803d; }
+    
+    .autocenter-off { background-color: #475569; }
+    .autocenter-off:active { background-color: #334155; }
 
     .badge {
       display: inline-block; padding: 3px 10px; font-size: 12px;
@@ -51,7 +56,7 @@
   <h3>⚔️ GPS Land Claimer</h3>
   <div id="status">Tap button below to lock GPS</div>
   <button id="gps-button" class="btn gps-btn">📍 Find My Location</button>
-  <button id="recenter-button" class="btn recenter-btn" style="display: none;">🎯 Recenter Map</button>
+  <button id="autocenter-button" class="btn autocenter-on" style="display: none;">🎯 Auto-Center: ON</button>
   <div id="plot-info"></div>
 </div>
 
@@ -60,6 +65,7 @@
 <script>
   let userLat = 40.7128;
   let userLng = -74.006;
+  let autoCenterEnabled = true;
 
   const map = new maplibregl.Map({
     container: 'map',
@@ -138,6 +144,18 @@
     return features;
   }
 
+  // Helper to update Auto-Center button visuals
+  function updateAutoCenterUI() {
+    const btn = document.getElementById('autocenter-button');
+    if (autoCenterEnabled) {
+      btn.className = 'btn autocenter-on';
+      btn.innerText = '🎯 Auto-Center: ON';
+    } else {
+      btn.className = 'btn autocenter-off';
+      btn.innerText = '📍 Auto-Center: OFF (Tap to Lock)';
+    }
+  }
+
   map.on('load', () => {
     // Boost text sizes for high-DPI screens
     map.getStyle().layers.forEach(layer => {
@@ -184,13 +202,26 @@
       geolocate.trigger();
     });
 
-    // Tap button to recenter camera onto player GPS
-    document.getElementById('recenter-button').addEventListener('click', () => {
-      map.flyTo({
-        center: [userLng, userLat],
-        zoom: 16,
-        essential: true
-      });
+    // Toggle Auto-Center state or force center when pressed
+    document.getElementById('autocenter-button').addEventListener('click', () => {
+      autoCenterEnabled = !autoCenterEnabled;
+      updateAutoCenterUI();
+
+      if (autoCenterEnabled) {
+        map.flyTo({
+          center: [userLng, userLat],
+          zoom: 16,
+          essential: true
+        });
+      }
+    });
+
+    // Automatically pause Auto-Center if user manually drags/pans map
+    map.on('dragstart', () => {
+      if (autoCenterEnabled) {
+        autoCenterEnabled = false;
+        updateAutoCenterUI();
+      }
     });
 
     // Successful Location Tracking
@@ -200,13 +231,23 @@
 
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
       document.getElementById('gps-button').style.display = 'none';
-      document.getElementById('recenter-button').style.display = 'block'; // Show recenter button
+      document.getElementById('autocenter-button').style.display = 'block';
 
+      // Update grid tiles around new player position
       const updatedFeatures = generateSquareGrid(userLat, userLng);
       map.getSource('square-plots').setData({
         type: 'FeatureCollection',
         features: updatedFeatures
       });
+
+      // Smooth camera follow if auto-center is active
+      if (autoCenterEnabled) {
+        map.easeTo({
+          center: [userLng, userLat],
+          duration: 1000,
+          essential: true
+        });
+      }
     });
 
     // Detailed Mobile Error Diagnostics
