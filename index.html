@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Realtime RPG Square Land Map - Full Terrain</title>
+  
+  <!-- 1. Free MapLibre Renderer -->
+  <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
+
+  <style>
+    body { margin: 0; padding: 0; background-color: #0d1117; font-family: sans-serif; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    #ui-panel {
+      position: absolute; top: 15px; left: 15px; z-index: 10;
+      background: rgba(13, 17, 23, 0.9); color: #e6edf3;
+      padding: 12px 18px; border-radius: 8px; border: 1px solid #30363d;
+      max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+    .badge {
+      display: inline-block; padding: 2px 8px; font-size: 11px;
+      border-radius: 4px; font-weight: bold; margin-top: 4px;
+    }
+    .claimed { background-color: #2563eb; color: #fff; }
+    .wild { background-color: #10b981; color: #fff; }
+  </style>
+</head>
+<body>
+
+<div id="ui-panel">
+  <h3 style="margin: 0 0 5px 0;">⚔️ GPS Land Claimer</h3>
+  <div id="status">Acquiring GPS Signal...</div>
+  <div id="plot-info" style="margin-top: 8px; font-size: 13px;"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+  let userLat = 40.7128;
+  let userLng = -74.006;
+
+  // CARTO Voyager Style: Shows ALL OSM natural features (forests, woods, parks, lakes, creeks, trails)
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    center: [userLng, userLat],
+    zoom: 16
+  });
+
+  // Realtime GPS Control
+  const geolocate = new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true },
+    trackUserLocation: true,
+    showAccuracyCircle: true
+  });
+
+  map.addControl(geolocate);
+
+  // Square Plot Size (~50m x 50m)
+  const PLOT_SIZE = 0.0005;
+
+  function getSquarePlotCoordinates(lat, lng) {
+    const minLat = Math.floor(lat / PLOT_SIZE) * PLOT_SIZE;
+    const maxLat = minLat + PLOT_SIZE;
+    const minLng = Math.floor(lng / PLOT_SIZE) * PLOT_SIZE;
+    const maxLng = minLng + PLOT_SIZE;
+
+    const plotId = `plot_${minLat.toFixed(4)}_${minLng.toFixed(4)}`;
+
+    const coordinates = [[
+      [minLng, minLat],
+      [maxLng, minLat],
+      [maxLng, maxLat],
+      [minLng, maxLat],
+      [minLng, minLat]
+    ]];
+
+    return { plotId, coordinates };
+  }
+
+  function generateSquareGrid(centerLat, centerLng) {
+    const features = [];
+    const gridRadius = 3;
+
+    for (let x = -gridRadius; x <= gridRadius; x++) {
+      for (let y = -gridRadius; y <= gridRadius; y++) {
+        const targetLat = centerLat + (y * PLOT_SIZE);
+        const targetLng = centerLng + (x * PLOT_SIZE);
+        const { plotId, coordinates } = getSquarePlotCoordinates(targetLat, targetLng);
+
+        const isCurrentStandingPlot = (x === 0 && y === 0);
+
+        features.push({
+          type: 'Feature',
+          properties: {
+            plotId: plotId,
+            isClaimed: isCurrentStandingPlot
+          },
+          geometry: { type: 'Polygon', coordinates: coordinates }
+        });
+      }
+    }
+    return features;
+  }
+
+  map.on('load', () => {
+    geolocate.trigger();
+
+    const initialFeatures = generateSquareGrid(userLat, userLng);
+
+    map.addSource('square-plots', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: features = initialFeatures }
+    });
+
+    // Square Grid Layer (Blue = Home Base, Green = Unclaimed Land)
+    map.addLayer({
+      id: 'plots-fill',
+      type: 'fill',
+      source: 'square-plots',
+      paint: {
+        'fill-color': ['case', ['get', 'isClaimed'], '#2563eb', '#10b981'],
+        'fill-opacity': 0.35
+      }
+    });
+
+    map.addLayer({
+      id: 'plots-outline',
+      type: 'line',
+      source: 'square-plots',
+      paint: {
+        'line-color': '#1e293b',
+        'line-width': 1.5,
+        'line-opacity': 0.7
+      }
+    });
+
+    // Update grid dynamically on GPS movement
+    geolocate.on('geolocate', (e) => {
+      userLat = e.coords.latitude;
+      userLng = e.coords.longitude;
+
+      document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
+
+      const updatedFeatures = generateSquareGrid(userLat, userLng);
+      map.getSource('square-plots').setData({
+        type: 'FeatureCollection',
+        features: updatedFeatures
+      });
+    });
+
+    // Inspect Plots
+    map.on('click', 'plots-fill', (e) => {
+      const props = e.features[0].properties;
+      const statusBadge = props.isClaimed 
+        ? '<span class="badge claimed">Home Base</span>' 
+        : '<span class="badge wild">Wilderness (100 Gold)</span>';
+
+      document.getElementById('plot-info').innerHTML = `
+        <b>Plot ID:</b> ${props.plotId}<br/>
+        <b>Status:</b> ${statusBadge}
+      `;
+    });
+  });
+</script>
+</body>
+</html>
