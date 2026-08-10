@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <!-- 1. CRITICAL FOR MOBILE: Fixes tiny microscopic text and viewport zoom -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Realtime RPG Square Land Map</title>
   
@@ -13,7 +12,6 @@
     body { margin: 0; padding: 0; background-color: #0d1117; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     
-    /* Mobile-optimized responsive UI overlay */
     #ui-panel {
       position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
       background: rgba(13, 17, 23, 0.92); color: #e6edf3;
@@ -22,8 +20,15 @@
       font-size: 15px;
     }
     #ui-panel h3 { margin: 0 0 6px 0; font-size: 18px; }
-    #status { font-size: 14px; color: #38bdf8; }
+    #status { font-size: 14px; color: #38bdf8; margin-bottom: 8px; }
     #plot-info { margin-top: 8px; font-size: 14px; line-height: 1.4; }
+
+    .gps-btn {
+      width: 100%; padding: 10px; background-color: #2563eb; color: white;
+      border: none; border-radius: 8px; font-weight: bold; font-size: 14px;
+      cursor: pointer; margin-top: 4px;
+    }
+    .gps-btn:active { background-color: #1d4ed8; }
 
     .badge {
       display: inline-block; padding: 3px 10px; font-size: 12px;
@@ -37,7 +42,8 @@
 
 <div id="ui-panel">
   <h3>⚔️ GPS Land Claimer</h3>
-  <div id="status">Acquiring GPS Signal...</div>
+  <div id="status">Tap button below to lock GPS</div>
+  <button id="gps-button" class="gps-btn">📍 Find My Location</button>
   <div id="plot-info"></div>
 </div>
 
@@ -54,16 +60,20 @@
     zoom: 16
   });
 
+  // Geolocate Control with Timeout & Accuracy Fallbacks
   const geolocate = new maplibregl.GeolocateControl({
-    positionOptions: { enableHighAccuracy: true },
+    positionOptions: { 
+      enableHighAccuracy: true,
+      timeout: 10000,    // Give phone 10 seconds to acquire GPS lock
+      maximumAge: 0      // Always get fresh coordinates
+    },
     trackUserLocation: true,
     showAccuracyCircle: true
   });
 
   map.addControl(geolocate);
 
-  // Square Plot Size (~50m x 50m)
-  const PLOT_SIZE = 0.0005;
+  const PLOT_SIZE = 0.0005; // ~50m x 50m plots
 
   function getSquarePlotCoordinates(lat, lng) {
     const minLat = Math.floor(lat / PLOT_SIZE) * PLOT_SIZE;
@@ -110,7 +120,7 @@
   }
 
   map.on('load', () => {
-    // 2. Increase text size across map street and park labels for high-DPI phone screens
+    // Boost text sizes for high-DPI screens
     map.getStyle().layers.forEach(layer => {
       if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
         map.setLayoutProperty(layer.id, 'text-size', [
@@ -120,8 +130,6 @@
         ]);
       }
     });
-
-    geolocate.trigger();
 
     const initialFeatures = generateSquareGrid(userLat, userLng);
 
@@ -151,12 +159,19 @@
       }
     });
 
+    // Tap button to manually trigger GPS (Satisfies Chrome User-Gesture Policy)
+    document.getElementById('gps-button').addEventListener('click', () => {
+      document.getElementById('status').innerText = '⌛ Acquiring GPS fix...';
+      geolocate.trigger();
+    });
+
     // Successful Location Tracking
     geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
 
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
+      document.getElementById('gps-button').style.display = 'none'; // Hide button once connected
 
       const updatedFeatures = generateSquareGrid(userLat, userLng);
       map.getSource('square-plots').setData({
@@ -165,12 +180,17 @@
       });
     });
 
-    // Mobile GPS Error Handler
+    // Detailed Mobile Error Diagnostics
     geolocate.on('error', (e) => {
-      console.error('GPS Error:', e);
+      console.error('GPS Error Details:', e);
+      let errorMsg = 'Unknown GPS Error';
+      
+      if (e.code === 1) errorMsg = 'Permission Denied by OS/Browser';
+      if (e.code === 2) errorMsg = 'Position Unavailable (Weak Signal)';
+      if (e.code === 3) errorMsg = 'GPS Timed Out (Try again outside)';
+
       document.getElementById('status').innerHTML = 
-        `<span style="color:#ef4444;">⚠️ Location Blocked:</span> ${e.message}<br/>` +
-        `<small style="color:#cbd5e1;">Mobile requires <b>HTTPS://</b> or GitHub Pages to allow GPS!</small>`;
+        `<span style="color:#ef4444;">⚠️ ${errorMsg}</span>`;
     });
 
     // Inspect Plots
