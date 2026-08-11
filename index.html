@@ -199,25 +199,14 @@
         map.setLayoutProperty(layer.id, 'visibility', 'none');
       }
 
-// 2. Recolor water polygons and channels to rich RPG blue (including creeks/streams)
-if (
-  id.includes('water') || 
-  id.includes('river') || 
-  id.includes('lake') || 
-  id.includes('ocean') || 
-  id.includes('sea') ||
-  id.includes('stream') ||
-  id.includes('canal') ||
-  id.includes('drain') ||
-  id.includes('ditch')
-) {
-  if (layer.type === 'fill') {
-    map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
-  } else if (layer.type === 'line') {
-    map.setPaintProperty(layer.id, 'line-color', '#2b65ec');
-    map.setPaintProperty(layer.id, 'line-width', 3); // Makes thin creek lines visible at zoom 18
-  }
-}
+      // 2. Recolor water polygons and channels to rich RPG blue
+      if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean') || id.includes('sea')) {
+        if (layer.type === 'fill') {
+          map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
+        } else if (layer.type === 'line') {
+          map.setPaintProperty(layer.id, 'line-color', '#1d4ed8');
+        }
+      }
 
       // 3. Recolor background and land polygons to grass green
       if (layer.type === 'background') {
