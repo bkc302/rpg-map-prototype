@@ -177,6 +177,7 @@
   let activeGoldNodes = [];
   const MAX_GOLD_NODES = 10;
   const PICKUP_RADIUS_METERS = 10;
+  const MAX_DESPAWN_DISTANCE_METERS = 250; // Despawn coins left too far behind
 
   // SVG Fallback Data URIs
   const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
@@ -231,9 +232,19 @@
 
   const PLOT_SIZE_LAT = 0.00045; // ~50 meters North-South
 
-  function getLngSize(lat) {
-    const rad = lat * Math.PI / 180;
+  // Global static snapping: Calculate exact fixed longitude size per latitude row
+  function getLngSizeForGridY(gridY) {
+    const centerLat = (gridY + 0.5) * PLOT_SIZE_LAT;
+    const rad = centerLat * Math.PI / 180;
     return PLOT_SIZE_LAT / Math.cos(rad);
+  }
+
+  // Converts any raw lat/lng into strict global grid coordinates
+  function latLngToGrid(lat, lng) {
+    const gridY = Math.floor(lat / PLOT_SIZE_LAT);
+    const lngSize = getLngSizeForGridY(gridY);
+    const gridX = Math.floor(lng / lngSize);
+    return { gridX, gridY };
   }
 
   function getDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -246,14 +257,27 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  function cleanupDistantCoins() {
+    if (!userLat || !userLng) return;
+    for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
+      const node = activeGoldNodes[i];
+      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
+      if (dist > MAX_DESPAWN_DISTANCE_METERS) {
+        node.marker.remove();
+        activeGoldNodes.splice(i, 1);
+      }
+    }
+  }
+
   function spawnSingleCoin() {
-    if (!userLat || !userLng || activeGoldNodes.length >= MAX_GOLD_NODES) return;
+    if (!userLat || !userLng) return;
+
+    cleanupDistantCoins();
+
+    if (activeGoldNodes.length >= MAX_GOLD_NODES) return;
 
     const gridRadius = 3;
-    const lngSize = getLngSize(userLat);
-
-    const playerGridY = Math.floor(userLat / PLOT_SIZE_LAT);
-    const playerGridX = Math.floor(userLng / lngSize);
+    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
 
     // Discrete anchor points within a cell
     const POSITIONS = [
@@ -283,6 +307,7 @@
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
 
       const pos = POSITIONS[slotIndex];
+      const lngSize = getLngSizeForGridY(targetGridY);
       const goldLat = (targetGridY + pos.y) * PLOT_SIZE_LAT;
       const goldLng = (targetGridX + pos.x) * lngSize;
 
@@ -316,7 +341,7 @@
         slotId: slotId, 
         lat: goldLat, 
         lng: goldLng, 
-        value: coinValue, // Store the coin's random value
+        value: coinValue,
         marker: marker 
       };
       
@@ -326,7 +351,6 @@
         e.stopPropagation();
         const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
         
-        // Dynamic label based on value rarity
         const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
 
         document.getElementById('plot-info').innerHTML = `
@@ -355,7 +379,7 @@
       const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
 
       if (dist <= PICKUP_RADIUS_METERS) {
-        playerGold += node.value; // Add dynamic coin value
+        playerGold += node.value;
         updateGoldDisplay();
         
         const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
@@ -368,9 +392,10 @@
     }
   }
 
-  function createPlotFeature(gridX, gridY, lngSize) {
+  function createPlotFeature(gridX, gridY) {
     const minLat = gridY * PLOT_SIZE_LAT;
     const maxLat = (gridY + 1) * PLOT_SIZE_LAT;
+    const lngSize = getLngSizeForGridY(gridY);
     const minLng = gridX * lngSize;
     const maxLng = (gridX + 1) * lngSize;
 
@@ -393,14 +418,12 @@
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
     const gridRadius = 4;
-    const lngSize = getLngSize(centerLat);
 
-    const playerGridY = Math.floor(centerLat / PLOT_SIZE_LAT);
-    const playerGridX = Math.floor(centerLng / lngSize);
+    const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(centerLat, centerLng);
 
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        features.push(createPlotFeature(playerGridX + x, playerGridY + y, lngSize));
+        features.push(createPlotFeature(centerGridX + x, centerGridY + y));
       }
     }
     return features;
@@ -560,9 +583,10 @@
       userLng = e.coords.longitude;
 
       requestWakeLock();
+      cleanupDistantCoins();
 
       // First time getting location -> Start Game
-      if (!gameStarted) {
+     if (!gameStarted) {
         gameStarted = true;
         document.getElementById('start-overlay').style.display = 'none';
         document.getElementById('ui-panel').style.display = 'block';
