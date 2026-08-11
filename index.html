@@ -176,7 +176,7 @@
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
   const MAX_GOLD_NODES = 10;
-  const PICKUP_RADIUS_METERS = 2.5;
+  const PICKUP_RADIUS_METERS = 10;
 
   // SVG Fallback Data URIs
   const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
@@ -333,7 +333,7 @@
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
           <b>Distance:</b> ${dist}m away<br/>
-          <small style="color:#94a3b8;">Walk within 8 feet to pick up!</small>
+          <small style="color:#94a3b8;">Walk within 10m to pick up!</small>
         `;
       });
 
