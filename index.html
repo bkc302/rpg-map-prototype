@@ -227,13 +227,20 @@
     });
 
     // Boost text sizes for high-DPI screens
+    //map.getStyle().layers.forEach(layer => {
+      //if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+        //map.setLayoutProperty(layer.id, 'text-size', [
+          //'interpolate', ['linear'], ['zoom'],
+          //10, 14,
+          //16, 20
+        //]);
+      //}
+    //});
+
+    // 🙈 Hide all text labels, road names, and place markers
     map.getStyle().layers.forEach(layer => {
-      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
-        map.setLayoutProperty(layer.id, 'text-size', [
-          'interpolate', ['linear'], ['zoom'],
-          10, 14,
-          16, 20
-        ]);
+      if (layer.type === 'symbol') {
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
       }
     });
 
