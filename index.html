@@ -255,7 +255,7 @@
     const playerGridY = Math.floor(userLat / PLOT_SIZE_LAT);
     const playerGridX = Math.floor(userLng / lngSize);
 
-    // Discrete anchor points within a cell (0.15 to 0.85 keeps coins away from grid borders)
+    // Discrete anchor points within a cell
     const POSITIONS = [
       { x: 0.50, y: 0.50 }, // Center
       { x: 0.20, y: 0.20 }, // Bottom-Left Corner
@@ -277,16 +277,19 @@
       const targetGridY = playerGridY + offsetY;
       const cellId = `plot_${targetGridY}_${targetGridX}`;
 
-      // Pick a random anchor slot from the 9 available positions
       const slotIndex = Math.floor(Math.random() * POSITIONS.length);
       const slotId = `${cellId}_slot_${slotIndex}`;
 
-      // Skip if this exact slot location already has an active coin
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
 
       const pos = POSITIONS[slotIndex];
       const goldLat = (targetGridY + pos.y) * PLOT_SIZE_LAT;
       const goldLng = (targetGridX + pos.x) * lngSize;
+
+      // Weighted Rarity Roll: 
+      // 1 Gold = 60%, 2 Gold = 20%, 3 Gold = 10%, 4 Gold = 7%, 5 Gold = 3%
+      const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
+      const coinValue = weights[Math.floor(Math.random() * weights.length)];
 
       const goldContainer = document.createElement('div');
       goldContainer.className = 'gold-marker-container';
@@ -313,6 +316,7 @@
         slotId: slotId, 
         lat: goldLat, 
         lng: goldLng, 
+        value: coinValue, // Store the coin's random value
         marker: marker 
       };
       
@@ -321,15 +325,18 @@
       goldContainer.addEventListener('click', (e) => {
         e.stopPropagation();
         const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
+        
+        // Dynamic label based on value rarity
+        const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+
         document.getElementById('plot-info').innerHTML = `
-          <b>🪙 Gold Coin:</b> +1 Gold<br/>
+          <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
           <b>Distance:</b> ${dist}m away<br/>
           <small style="color:#94a3b8;">Walk within 25m to pick up!</small>
         `;
       });
 
-      // Successfully spawned a coin, break out of loop
       break;
     }
   }
@@ -348,9 +355,12 @@
       const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
 
       if (dist <= PICKUP_RADIUS_METERS) {
-        playerGold += 1;
+        playerGold += node.value; // Add dynamic coin value
         updateGoldDisplay();
-        document.getElementById('status').innerText = `✨ Picked up +1 Gold!`;
+        
+        const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
+        document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
+        
         node.marker.remove();
         activeGoldNodes.splice(i, 1);
         renderSelectedPlotCard();
