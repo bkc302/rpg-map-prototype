@@ -6,7 +6,7 @@
   <meta http-equiv="Expires" content="0" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Realtime RPG Square Land Map</title>
+  <title>Realtime RPG Fixed Land Grid</title>
   
   <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
@@ -15,69 +15,33 @@
     body { margin: 0; padding: 0; background-color: #0d1117; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     
-    /* Fullscreen Start Screen Overlay */
-    #start-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(13, 17, 23, 0.96);
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      box-sizing: border-box;
-      text-align: center;
-      color: #e6edf3;
-    }
-    #start-overlay h1 { font-size: 26px; margin-bottom: 8px; color: #facc15; }
-    #start-overlay p { font-size: 15px; color: #94a3b8; max-width: 320px; margin-bottom: 20px; line-height: 1.4; }
-    #start-status { font-size: 14px; color: #38bdf8; margin-top: 12px; min-height: 20px; }
-
     #ui-panel {
-      position: absolute; 
-      top: 12px; 
-      left: 12px; 
-      z-index: 10;
-      width: 300px;
-      max-width: calc(100vw - 24px);
-      box-sizing: border-box;
-      background: rgba(13, 17, 23, 0.92); 
-      color: #e6edf3;
-      padding: 14px 18px; 
-      border-radius: 12px; 
-      border: 1px solid #30363d;
+      position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
+      background: rgba(13, 17, 23, 0.92); color: #e6edf3;
+      padding: 14px 18px; border-radius: 12px; border: 1px solid #30363d;
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       font-size: 15px;
-      display: none; /* Hidden until game starts */
     }
-    #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; }
-    #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 6px; }
-    #status { font-size: 13px; color: #38bdf8; margin-bottom: 8px; }
-    
-    #plot-card {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid #30363d;
-      font-size: 14px;
-      line-height: 1.4;
-    }
+    #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
+    #gold-counter { font-size: 15px; color: #f59e0b; font-weight: bold; }
+    #status { font-size: 14px; color: #38bdf8; margin-bottom: 8px; }
+    #plot-info { margin-top: 8px; font-size: 14px; line-height: 1.4; }
 
     .btn {
-      width: 100%; padding: 12px; color: white;
-      border: none; border-radius: 8px; font-weight: bold; font-size: 15px;
-      cursor: pointer; transition: background-color 0.2s ease, opacity 0.2s ease;
+      width: 100%; padding: 10px; color: white;
+      border: none; border-radius: 8px; font-weight: bold; font-size: 14px;
+      cursor: pointer; margin-top: 6px;
+      transition: background-color 0.2s ease;
     }
     .gps-btn { background-color: #2563eb; }
     .gps-btn:active { background-color: #1d4ed8; }
     
-    .buy-btn { background-color: #16a34a; }
-    .buy-btn:hover { background-color: #15803d; }
-    .buy-btn:disabled { background-color: #475569; cursor: not-allowed; opacity: 0.6; }
+    .claim-btn { background-color: #10b981; }
+    .claim-btn:active { background-color: #059669; }
+    .claim-btn:disabled { background-color: #475569; cursor: not-allowed; opacity: 0.6; }
 
     .autocenter-on { background-color: #16a34a; }
     .autocenter-on:active { background-color: #15803d; }
-    
     .autocenter-off { background-color: #475569; }
     .autocenter-off:active { background-color: #334155; }
 
@@ -86,378 +50,151 @@
       border-radius: 6px; font-weight: bold; margin-top: 4px;
     }
     .claimed { background-color: #2563eb; color: #fff; }
-    .wild { background-color: #10b981; color: #fff; }
+    .reachable { background-color: #10b981; color: #fff; }
+    .unreachable { background-color: #ef4444; color: #fff; }
 
-    /* Outer Marker Containers (Positioned by MapLibre) */
-    .player-marker-container {
-      width: 48px;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .gold-marker-container {
-      width: 32px;
-      height: 32px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Inner Marker Visual Elements */
-    .player-marker-icon {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+    .player-marker {
+      width: 48px; height: 48px;
+      background-image: url('player.png');
+      background-size: contain; background-repeat: no-repeat; background-position: center;
       image-rendering: pixelated;
-      image-rendering: crisp-edges;
       filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
-    }
-
-    .gold-marker-icon {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));
-      animation: bounce 2s ease-in-out infinite;
-    }
-
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-6px); }
-    }
-
-    .maplibregl-ctrl-top-right,
-    .maplibregl-ctrl-bottom-right {
-      display: none !important;
     }
   </style>
 </head>
 <body>
 
-<!-- Start Screen Overlay -->
-<div id="start-overlay">
-  <h1>⚔️ GPS Land Claimer</h1>
-  <p>Acquire your GPS location to generate local territory grid squares and gold coins around you.</p>
-  <button id="start-btn" class="btn gps-btn">📍 Find My Location & Start</button>
-  <div id="start-status"></div>
-</div>
-
-<!-- Main Game UI Panel -->
 <div id="ui-panel">
-  <h3>⚔️ GPS Land Claimer</h3>
-  <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
-  <div id="status">GPS Active</div>
-  <button id="autocenter-button" class="btn autocenter-on">🎯 Auto-Center: ON</button>
-  
-  <div id="plot-card">
-    <div id="plot-info"><i>Tap any square or coin to inspect.</i></div>
-  </div>
+  <h3>
+    <span>⚔️ GPS Land Claimer</span>
+    <span id="gold-counter">🪙 0 Gold</span>
+  </h3>
+  <div id="status">Tap button below to lock GPS</div>
+  <button id="gps-button" class="btn gps-btn">📍 Find My Location</button>
+  <button id="autocenter-button" class="btn autocenter-on" style="display: none;">🎯 Auto-Center: ON</button>
+  <div id="plot-info"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
-  let userLat = null;
-  let userLng = null;
-  let gameStarted = false;
+  let userLat = 40.7128;
+  let userLng = -74.006;
   let autoCenterEnabled = true;
+  let totalGold = 0;
 
-  // Game Economy & Land Ownership State
-  let playerGold = 100;
-  const PLOT_PRICE = 100;
-  const claimedPlotIds = new Set();
-  let selectedPlotId = null;
+  // 🎯 Reach distance configuration (10 meters)
+  const REACH_DISTANCE_METERS = 10; 
 
-  // Gold Spawning & Gathering System
-  let activeGoldNodes = [];
-  const MAX_GOLD_NODES = 10;
-  const PICKUP_RADIUS_METERS = 10;
+  // Grid dimensions (~50m latitude height per tile)
+  const PLOT_SIZE_LAT = 0.00045; 
 
-  // SVG Fallback Data URIs
-  const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
-  const GOLD_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23facc15' stroke='%23b45309' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3Ctext x='16' y='21' font-size='13' font-weight='bold' text-anchor='middle' fill='%23854d0e' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E";
-
-  let wakeLock = null;
-  async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
-      try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
-    }
-  }
-
-  document.addEventListener('visibilitychange', async () => {
-    if (wakeLock !== null && document.visibilityState === 'visible') {
-      await requestWakeLock();
-    }
-  });
+  // Track claimed plots and collected coins persistent in session
+  const claimedPlots = new Set();
+  const collectedCoins = new Set();
 
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-    center: [0, 0],
-    zoom: 2
+    center: [userLng, userLat],
+    zoom: 18
   });
 
   const geolocate = new maplibregl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    trackUserLocation: true,
-    showUserLocation: false,
-    showAccuracyCircle: true
+    trackUserLocation: true, showUserLocation: false, showAccuracyCircle: true
   });
-
   map.addControl(geolocate);
 
-  // Player Marker Construction using <img> with onerror fallback
-  const playerContainer = document.createElement('div');
-  playerContainer.className = 'player-marker-container';
-
-  const playerImg = document.createElement('img');
-  playerImg.className = 'player-marker-icon';
-  playerImg.src = 'player.png';
-  playerImg.onerror = function() {
-    this.onerror = null;
-    this.src = PLAYER_SVG_FALLBACK;
-  };
-  playerContainer.appendChild(playerImg);
+  const playerEl = document.createElement('div');
+  playerEl.className = 'player-marker';
 
   const playerMarker = new maplibregl.Marker({
-    element: playerContainer,
+    element: playerEl,
     anchor: 'center'
   });
 
-  const PLOT_SIZE_LAT = 0.00045; // ~50 meters North-South
-
-  function getLngSize(lat) {
-    const rad = lat * Math.PI / 180;
-    return PLOT_SIZE_LAT / Math.cos(rad);
-  }
-
+  // Calculate distance in meters (Haversine)
   function getDistanceMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
-  function spawnSingleCoin() {
-    if (!userLat || !userLng || activeGoldNodes.length >= MAX_GOLD_NODES) return;
-
-    const gridRadius = 3;
-    const lngSize = getLngSize(userLat);
-
-    const playerGridY = Math.floor(userLat / PLOT_SIZE_LAT);
-    const playerGridX = Math.floor(userLng / lngSize);
-
-    // Discrete anchor points within a cell
-    const POSITIONS = [
-      { x: 0.50, y: 0.50 }, // Center
-      { x: 0.20, y: 0.20 }, // Bottom-Left Corner
-      { x: 0.80, y: 0.20 }, // Bottom-Right Corner
-      { x: 0.20, y: 0.80 }, // Top-Left Corner
-      { x: 0.80, y: 0.80 }, // Top-Right Corner
-      { x: 0.50, y: 0.20 }, // Bottom Midpoint
-      { x: 0.50, y: 0.80 }, // Top Midpoint
-      { x: 0.20, y: 0.50 }, // Left Midpoint
-      { x: 0.80, y: 0.50 }  // Right Midpoint
-    ];
-
-    // Try up to 15 times to find an unoccupied slot in the surrounding grid
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const offsetX = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
-      const offsetY = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
-
-      const targetGridX = playerGridX + offsetX;
-      const targetGridY = playerGridY + offsetY;
-      const cellId = `plot_${targetGridY}_${targetGridX}`;
-
-      const slotIndex = Math.floor(Math.random() * POSITIONS.length);
-      const slotId = `${cellId}_slot_${slotIndex}`;
-
-      if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
-
-      const pos = POSITIONS[slotIndex];
-      const goldLat = (targetGridY + pos.y) * PLOT_SIZE_LAT;
-      const goldLng = (targetGridX + pos.x) * lngSize;
-
-      // Weighted Rarity Roll: 
-      // 1 Gold = 60%, 2 Gold = 20%, 3 Gold = 10%, 4 Gold = 7%, 5 Gold = 3%
-      const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
-      const coinValue = weights[Math.floor(Math.random() * weights.length)];
-
-      const goldContainer = document.createElement('div');
-      goldContainer.className = 'gold-marker-container';
-
-      const goldImg = document.createElement('img');
-      goldImg.className = 'gold-marker-icon';
-      goldImg.src = 'gold.png';
-      goldImg.onerror = function() {
-        this.onerror = null;
-        this.src = GOLD_SVG_FALLBACK;
-      };
-      goldContainer.appendChild(goldImg);
-
-      const nodeId = `coin_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-
-      const marker = new maplibregl.Marker({
-        element: goldContainer,
-        anchor: 'center'
-      }).setLngLat([goldLng, goldLat]).addTo(map);
-
-      const goldNode = { 
-        id: nodeId, 
-        cellId: cellId, 
-        slotId: slotId, 
-        lat: goldLat, 
-        lng: goldLng, 
-        value: coinValue, // Store the coin's random value
-        marker: marker 
-      };
-      
-      activeGoldNodes.push(goldNode);
-
-      goldContainer.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
-        
-        // Dynamic label based on value rarity
-        const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
-
-        document.getElementById('plot-info').innerHTML = `
-          <b>${valueLabel}:</b> +${coinValue} Gold<br/>
-          <b>Grid Square:</b> ${cellId}<br/>
-          <b>Distance:</b> ${dist}m away<br/>
-          <small style="color:#94a3b8;">Walk within 10m to pick up!</small>
-        `;
-      });
-
-      break;
-    }
+  // Deterministic 2D PRNG - Spawns identical coins worldwide for same (x,y)
+  function pseudoRandom(x, y) {
+    let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123;
+    return n - Math.floor(n);
   }
 
-  function initCoinSpawns() {
-    const initialCount = Math.floor(Math.random() * 3) + 4;
-    for (let i = 0; i < initialCount; i++) {
-      spawnSingleCoin();
-    }
-    setInterval(spawnSingleCoin, 20000);
+  // Calculate longitude width for a FIXED grid row integer Y
+  function getRowLngSize(gridY) {
+    const rowLat = gridY * PLOT_SIZE_LAT;
+    const rad = rowLat * Math.PI / 180;
+    return PLOT_SIZE_LAT / Math.cos(rad);
   }
 
-  function checkCoinProximity() {
-    for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
-      const node = activeGoldNodes[i];
-      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
-
-      if (dist <= PICKUP_RADIUS_METERS) {
-        playerGold += node.value; // Add dynamic coin value
-        updateGoldDisplay();
-        
-        const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
-        document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
-        
-        node.marker.remove();
-        activeGoldNodes.splice(i, 1);
-        renderSelectedPlotCard();
-      }
-    }
-  }
-
-  function createPlotFeature(gridX, gridY, lngSize) {
+  function createPlotFeature(gridX, gridY) {
     const minLat = gridY * PLOT_SIZE_LAT;
     const maxLat = (gridY + 1) * PLOT_SIZE_LAT;
+
+    // Lock longitude step strictly to grid row latitude (prevents grid movement)
+    const lngSize = getRowLngSize(gridY);
     const minLng = gridX * lngSize;
     const maxLng = (gridX + 1) * lngSize;
 
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
     const plotId = `plot_${gridY}_${gridX}`;
+
+    const isClaimed = claimedPlots.has(plotId);
+    const isCoinCollected = collectedCoins.has(plotId);
+
+    // Deterministic World Spawner (~35% tile coin chance globally)
+    const rawCoinRoll = pseudoRandom(gridX, gridY);
+    const hasCoin = rawCoinRoll < 0.35 && !isCoinCollected && !isClaimed;
 
     return {
       type: 'Feature',
       properties: {
         plotId: plotId,
-        isClaimed: claimedPlotIds.has(plotId),
-        isSelected: (plotId === selectedPlotId)
+        isClaimed: isClaimed,
+        hasCoin: hasCoin,
+        centerLat: centerLat,
+        centerLng: centerLng
       },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]]
+        coordinates: [[
+          [minLng, minLat],
+          [maxLng, minLat],
+          [maxLng, maxLat],
+          [minLng, maxLat],
+          [minLng, minLat]
+        ]]
       }
     };
   }
 
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
-    const gridRadius = 4;
-    const lngSize = getLngSize(centerLat);
+    const gridRadius = 8; // Render ~800m range around player
 
     const playerGridY = Math.floor(centerLat / PLOT_SIZE_LAT);
-    const playerGridX = Math.floor(centerLng / lngSize);
+    const playerRowLngSize = getRowLngSize(playerGridY);
+    const playerGridX = Math.floor(centerLng / playerRowLngSize);
 
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        features.push(createPlotFeature(playerGridX + x, playerGridY + y, lngSize));
+        features.push(createPlotFeature(playerGridX + x, playerGridY + y));
       }
     }
     return features;
-  }
-
-  function refreshMapGrid() {
-    if (map.getSource('square-plots') && userLat && userLng) {
-      map.getSource('square-plots').setData({
-        type: 'FeatureCollection',
-        features: generateSquareGrid(userLat, userLng)
-      });
-    }
-  }
-
-  function updateGoldDisplay() {
-    document.getElementById('gold-amount').innerText = playerGold;
-  }
-
-  function renderSelectedPlotCard() {
-    const container = document.getElementById('plot-info');
-    if (!selectedPlotId) {
-      container.innerHTML = `<i>Tap any square or coin to inspect.</i>`;
-      return;
-    }
-
-    if (claimedPlotIds.has(selectedPlotId)) {
-      container.innerHTML = `
-        <b>Plot ID:</b> ${selectedPlotId}<br/>
-        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span>
-      `;
-    } else {
-      const canAfford = playerGold >= PLOT_PRICE;
-      const buttonText = canAfford ? `🛒 Buy Plot (${PLOT_PRICE} Gold)` : `❌ Need ${PLOT_PRICE} Gold`;
-      const disabledAttr = canAfford ? '' : 'disabled';
-
-      container.innerHTML = `
-        <b>Plot ID:</b> ${selectedPlotId}<br/>
-        <b>Price:</b> 💰 ${PLOT_PRICE} Gold<br/>
-        <b>Status:</b> <span class="badge wild">Wilderness</span><br/>
-        <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>${buttonText}</button>
-      `;
-
-      if (canAfford) {
-        document.getElementById('buy-plot-btn').addEventListener('click', buySelectedPlot);
-      }
-    }
-  }
-
-  function buySelectedPlot() {
-    if (!selectedPlotId || claimedPlotIds.has(selectedPlotId)) return;
-    if (playerGold >= PLOT_PRICE) {
-      playerGold -= PLOT_PRICE;
-      claimedPlotIds.add(selectedPlotId);
-      updateGoldDisplay();
-      renderSelectedPlotCard();
-      refreshMapGrid();
-    }
   }
 
   function updateAutoCenterUI() {
@@ -472,137 +209,148 @@
   }
 
   map.on('load', () => {
-    // Custom Map Style Overrides
+    // RPG Style Overrides
     map.getStyle().layers.forEach(layer => {
       const id = layer.id.toLowerCase();
       if (id.includes('building')) map.setLayoutProperty(layer.id, 'visibility', 'none');
-      if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean')) {
+      if (id.includes('water') || id.includes('river') || id.includes('lake')) {
         if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
-        else if (layer.type === 'line') map.setPaintProperty(layer.id, 'line-color', '#1d4ed8');
       }
       if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
-      if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood')) && layer.type === 'fill' && !id.includes('water')) {
+      if ((id.includes('land') || id.includes('park') || id.includes('green')) && layer.type === 'fill' && !id.includes('water')) {
         map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
       }
-      if ((id.includes('road') || id.includes('highway') || id.includes('street')) && layer.type === 'line') {
-        map.setPaintProperty(layer.id, 'line-color', id.includes('case') ? '#5c4028' : '#9e7853');
-      }
-      if (layer.type === 'symbol') map.setLayoutProperty(layer.id, 'visibility', 'none');
     });
+
+    const initialFeatures = generateSquareGrid(userLat, userLng);
 
     map.addSource('square-plots', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] }
+      data: { type: 'FeatureCollection', features: initialFeatures }
     });
 
+    // Plot Fills
     map.addLayer({
       id: 'plots-fill',
       type: 'fill',
       source: 'square-plots',
-      paint: { 'fill-color': '#000000', 'fill-opacity': 0 }
+      paint: {
+        'fill-color': ['case', ['get', 'isClaimed'], '#2563eb', '#10b981'],
+        'fill-opacity': ['case', ['get', 'isClaimed'], 0.45, 0.2]
+      }
     });
 
+    // Plot Outlines
     map.addLayer({
       id: 'plots-outline',
       type: 'line',
       source: 'square-plots',
-      filter: ['all', ['!', ['get', 'isClaimed']], ['!', ['get', 'isSelected']]],
-      paint: { 'line-color': '#1e293b', 'line-width': 2, 'line-opacity': 0.7 }
+      paint: {
+        'line-color': '#1e293b',
+        'line-width': 1.5,
+        'line-opacity': 0.6
+      }
     });
 
+    // 🪙 World Coin Overlay Layer
     map.addLayer({
-      id: 'plots-selected-outline',
-      type: 'line',
+      id: 'plots-coins',
+      type: 'symbol',
       source: 'square-plots',
-      filter: ['get', 'isSelected'],
-      paint: { 'line-color': '#ef4444', 'line-width': 4, 'line-opacity': 1.0 }
+      filter: ['get', 'hasCoin'],
+      layout: {
+        'text-field': '🪙',
+        'text-size': 22,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true
+      }
     });
 
-    map.addLayer({
-      id: 'plots-claimed-outline',
-      type: 'line',
-      source: 'square-plots',
-      filter: ['get', 'isClaimed'],
-      paint: { 'line-color': '#eab308', 'line-width': 4, 'line-opacity': 1.0 }
-    });
-
-    // Start Button Event Listener
-    document.getElementById('start-btn').addEventListener('click', () => {
-      document.getElementById('start-status').innerText = '⌛ Acquiring GPS fix...';
+    document.getElementById('gps-button').addEventListener('click', () => {
+      document.getElementById('status').innerText = '⌛ Acquiring GPS fix...';
       geolocate.trigger();
     });
 
     document.getElementById('autocenter-button').addEventListener('click', () => {
       autoCenterEnabled = !autoCenterEnabled;
       updateAutoCenterUI();
-      if (autoCenterEnabled && userLat && userLng) {
-        map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
-      }
+      if (autoCenterEnabled) map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
     });
 
-    map.on('dragstart', () => {
-      if (autoCenterEnabled) {
-        autoCenterEnabled = false;
-        updateAutoCenterUI();
-      }
-    });
+    map.on('dragstart', () => { if (autoCenterEnabled) { autoCenterEnabled = false; updateAutoCenterUI(); } });
 
-    map.on('zoomstart', (e) => {
-      if (e.originalEvent && autoCenterEnabled) {
-        autoCenterEnabled = false;
-        updateAutoCenterUI();
-      }
-    });
-
-    // Successful Location Tracking Callback
     geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
 
-      requestWakeLock();
-
-      // First time getting location -> Start Game
-      if (!gameStarted) {
-        gameStarted = true;
-        document.getElementById('start-overlay').style.display = 'none';
-        document.getElementById('ui-panel').style.display = 'block';
-
-        playerMarker.setLngLat([userLng, userLat]).addTo(map);
-        refreshMapGrid();
-        initCoinSpawns();
-
-        map.jumpTo({ center: [userLng, userLat], zoom: 18 });
-      } else {
-        playerMarker.setLngLat([userLng, userLat]);
-        refreshMapGrid();
-        checkCoinProximity();
-
-        if (autoCenterEnabled) {
-          map.easeTo({ center: [userLng, userLat], zoom: 18, duration: 1000, essential: true });
-        }
-      }
-
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
-    });
+      document.getElementById('gps-button').style.display = 'none';
+      document.getElementById('autocenter-button').style.display = 'block';
 
-    geolocate.on('error', (e) => {
-      let errorMsg = 'Unknown GPS Error';
-      if (e.code === 1) errorMsg = 'Permission Denied - Please enable location access';
-      if (e.code === 2) errorMsg = 'Position Unavailable';
-      if (e.code === 3) errorMsg = 'GPS Timed Out';
+      playerMarker.setLngLat([userLng, userLat]).addTo(map);
 
-      if (!gameStarted) {
-        document.getElementById('start-status').innerHTML = `<span style="color:#ef4444;">⚠️ ${errorMsg}</span>`;
-      } else {
-        document.getElementById('status').innerHTML = `<span style="color:#ef4444;">⚠️ ${errorMsg}</span>`;
+      // Refresh surrounding grid
+      map.getSource('square-plots').setData({
+        type: 'FeatureCollection',
+        features: generateSquareGrid(userLat, userLng)
+      });
+
+      if (autoCenterEnabled) {
+        map.easeTo({ center: [userLng, userLat], zoom: 18, duration: 1000, essential: true });
       }
     });
 
+    // Click Interaction (Checks 10m range)
     map.on('click', 'plots-fill', (e) => {
-      if (e.features.length > 0) {
-        selectedPlotId = e.features[0].properties.plotId;
-        renderSelectedPlotCard();
-        refreshMapGrid();
+      const props = e.features[0].properties;
+      const distMeters = getDistanceMeters(userLat, userLng, props.centerLat, props.centerLng);
+      const isReachable = distMeters <= REACH_DISTANCE_METERS;
+
+      let statusBadge = '';
+      let actionHtml = '';
+
+      if (props.isClaimed) {
+        statusBadge = '<span class="badge claimed">Claimed Territory</span>';
+      } else if (isReachable) {
+        statusBadge = `<span class="badge reachable">In Range (${distMeters.toFixed(1)}m)</span>`;
+        if (props.hasCoin) {
+          actionHtml = `<button id="claim-btn" class="btn claim-btn">🪙 Grab Coin (+50 Gold) & Claim Plot</button>`;
+        } else {
+          actionHtml = `<button id="claim-btn" class="btn claim-btn">🚩 Claim Empty Plot</button>`;
+        }
+      } else {
+        const needed = (distMeters - REACH_DISTANCE_METERS).toFixed(1);
+        statusBadge = `<span class="badge unreachable">Too Far (${distMeters.toFixed(1)}m away)</span>`;
+        actionHtml = `<button class="btn claim-btn" disabled>🔒 Walk ${needed}m closer</button>`;
+      }
+
+      document.getElementById('plot-info').innerHTML = `
+        <b>Plot:</b> ${props.plotId}<br/>
+        <b>Distance:</b> ${distMeters.toFixed(1)} meters<br/>
+        <b>Status:</b> ${statusBadge}<br/>
+        ${actionHtml}
+      `;
+
+      const claimBtn = document.getElementById('claim-btn');
+      if (claimBtn) {
+        claimBtn.addEventListener('click', () => {
+          claimedPlots.add(props.plotId);
+          if (props.hasCoin) {
+            collectedCoins.add(props.plotId);
+            totalGold += 50;
+            document.getElementById('gold-counter').innerText = `🪙 ${totalGold} Gold`;
+          }
+
+          map.getSource('square-plots').setData({
+            type: 'FeatureCollection',
+            features: generateSquareGrid(userLat, userLng)
+          });
+
+          document.getElementById('plot-info').innerHTML = `
+            <b>Plot:</b> ${props.plotId}<br/>
+            <b>Status:</b> <span class="badge claimed">Claimed!</span>
+          `;
+        });
       }
     });
   });
