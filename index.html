@@ -85,7 +85,7 @@
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [userLng, userLat],
-    zoom: 18.5
+    zoom: 18
   });
 
   const geolocate = new maplibregl.GeolocateControl({
@@ -234,7 +234,7 @@
       if (autoCenterEnabled) {
         map.flyTo({
           center: [userLng, userLat],
-          zoom: 18.5,
+          zoom: 18,
           essential: true
         });
       }
