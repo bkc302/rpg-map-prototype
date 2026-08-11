@@ -543,6 +543,380 @@
 
     map.addLayer({
       id: 'plots-claimed-outline',
+<script>
+  let userLat = null;
+  let userLng = null;
+  let gameStarted = false;
+  let autoCenterEnabled = true;
+
+  // Game Economy & Land Ownership State
+  let playerGold = 100;
+  const PLOT_PRICE = 100;
+  const claimedPlotIds = new Set();
+  let selectedPlotId = null;
+
+  // Gold Spawning & Gathering System
+  let activeGoldNodes = [];
+  const MAX_GOLD_NODES = 10;
+  const PICKUP_RADIUS_METERS = 10;
+  const MAX_DESPAWN_DISTANCE_METERS = 250; // Despawn coins left too far behind
+
+  // SVG Fallback Data URIs
+  const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
+  const GOLD_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23facc15' stroke='%23b45309' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3Ctext x='16' y='21' font-size='13' font-weight='bold' text-anchor='middle' fill='%23854d0e' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E";
+
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+    }
+  }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      await requestWakeLock();
+    }
+  });
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    center: [0, 0],
+    zoom: 2
+  });
+
+  const geolocate = new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    trackUserLocation: true,
+    showUserLocation: false,
+    showAccuracyCircle: true
+  });
+
+  map.addControl(geolocate);
+
+  // Player Marker Construction using <img> with onerror fallback
+  const playerContainer = document.createElement('div');
+  playerContainer.className = 'player-marker-container';
+
+  const playerImg = document.createElement('img');
+  playerImg.className = 'player-marker-icon';
+  playerImg.src = 'player.png';
+  playerImg.onerror = function() {
+    this.onerror = null;
+    this.src = PLAYER_SVG_FALLBACK;
+  };
+  playerContainer.appendChild(playerImg);
+
+  const playerMarker = new maplibregl.Marker({
+    element: playerContainer,
+    anchor: 'center'
+  });
+
+  // Fixed degree step (~50 meters N-S, ~39 meters E-W in mid-latitudes)
+  const GRID_SIZE_DEG = 0.00045;
+
+  // Converts any raw lat/lng into strict global continuous grid coordinates
+  function latLngToGrid(lat, lng) {
+    return {
+      gridX: Math.floor(lng / GRID_SIZE_DEG),
+      gridY: Math.floor(lat / GRID_SIZE_DEG)
+    };
+  }
+
+  function getDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function cleanupDistantCoins() {
+    if (!userLat || !userLng) return;
+    for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
+      const node = activeGoldNodes[i];
+      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
+      if (dist > MAX_DESPAWN_DISTANCE_METERS) {
+        node.marker.remove();
+        activeGoldNodes.splice(i, 1);
+      }
+    }
+  }
+
+  function spawnSingleCoin() {
+    if (!userLat || !userLng) return;
+
+    cleanupDistantCoins();
+
+    if (activeGoldNodes.length >= MAX_GOLD_NODES) return;
+
+    const gridRadius = 3;
+    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
+
+    // Discrete anchor points within a cell
+    const POSITIONS = [
+      { x: 0.50, y: 0.50 }, // Center
+      { x: 0.20, y: 0.20 }, // Bottom-Left Corner
+      { x: 0.80, y: 0.20 }, // Bottom-Right Corner
+      { x: 0.20, y: 0.80 }, // Top-Left Corner
+      { x: 0.80, y: 0.80 }, // Top-Right Corner
+      { x: 0.50, y: 0.20 }, // Bottom Midpoint
+      { x: 0.50, y: 0.80 }, // Top Midpoint
+      { x: 0.20, y: 0.50 }, // Left Midpoint
+      { x: 0.80, y: 0.50 }  // Right Midpoint
+    ];
+
+    // Try up to 15 times to find an unoccupied slot in the surrounding grid
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const offsetX = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
+      const offsetY = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
+
+      const targetGridX = playerGridX + offsetX;
+      const targetGridY = playerGridY + offsetY;
+      const cellId = `plot_${targetGridY}_${targetGridX}`;
+
+      const slotIndex = Math.floor(Math.random() * POSITIONS.length);
+      const slotId = `${cellId}_slot_${slotIndex}`;
+
+      if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
+
+      const pos = POSITIONS[slotIndex];
+      const goldLat = (targetGridY + pos.y) * GRID_SIZE_DEG;
+      const goldLng = (targetGridX + pos.x) * GRID_SIZE_DEG;
+
+      // Weighted Rarity Roll: 
+      // 1 Gold = 60%, 2 Gold = 20%, 3 Gold = 10%, 4 Gold = 7%, 5 Gold = 3%
+      const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
+      const coinValue = weights[Math.floor(Math.random() * weights.length)];
+
+      const goldContainer = document.createElement('div');
+      goldContainer.className = 'gold-marker-container';
+
+      const goldImg = document.createElement('img');
+      goldImg.className = 'gold-marker-icon';
+      goldImg.src = 'gold.png';
+      goldImg.onerror = function() {
+        this.onerror = null;
+        this.src = GOLD_SVG_FALLBACK;
+      };
+      goldContainer.appendChild(goldImg);
+
+      const nodeId = `coin_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+
+      const marker = new maplibregl.Marker({
+        element: goldContainer,
+        anchor: 'center'
+      }).setLngLat([goldLng, goldLat]).addTo(map);
+
+      const goldNode = { 
+        id: nodeId, 
+        cellId: cellId, 
+        slotId: slotId, 
+        lat: goldLat, 
+        lng: goldLng, 
+        value: coinValue,
+        marker: marker 
+      };
+      
+      activeGoldNodes.push(goldNode);
+
+      goldContainer.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
+        
+        const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+
+        document.getElementById('plot-info').innerHTML = `
+          <b>${valueLabel}:</b> +${coinValue} Gold<br/>
+          <b>Grid Square:</b> ${cellId}<br/>
+          <b>Distance:</b> ${dist}m away<br/>
+          <small style="color:#94a3b8;">Walk within 10m to pick up!</small>
+        `;
+      });
+
+      break;
+    }
+  }
+
+  function initCoinSpawns() {
+    const initialCount = Math.floor(Math.random() * 3) + 4;
+    for (let i = 0; i < initialCount; i++) {
+      spawnSingleCoin();
+    }
+    setInterval(spawnSingleCoin, 20000);
+  }
+
+  function checkCoinProximity() {
+    for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
+      const node = activeGoldNodes[i];
+      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
+
+      if (dist <= PICKUP_RADIUS_METERS) {
+        playerGold += node.value;
+        updateGoldDisplay();
+        
+        const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
+        document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
+        
+        node.marker.remove();
+        activeGoldNodes.splice(i, 1);
+        renderSelectedPlotCard();
+      }
+    }
+  }
+
+  function createPlotFeature(gridX, gridY) {
+    const minLat = gridY * GRID_SIZE_DEG;
+    const maxLat = (gridY + 1) * GRID_SIZE_DEG;
+    const minLng = gridX * GRID_SIZE_DEG;
+    const maxLng = (gridX + 1) * GRID_SIZE_DEG;
+
+    const plotId = `plot_${gridY}_${gridX}`;
+
+    return {
+      type: 'Feature',
+      properties: {
+        plotId: plotId,
+        isClaimed: claimedPlotIds.has(plotId),
+        isSelected: (plotId === selectedPlotId)
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]]
+      }
+    };
+  }
+
+  function generateSquareGrid(centerLat, centerLng) {
+    const features = [];
+    const gridRadius = 4;
+
+    const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(centerLat, centerLng);
+
+    for (let x = -gridRadius; x <= gridRadius; x++) {
+      for (let y = -gridRadius; y <= gridRadius; y++) {
+        features.push(createPlotFeature(centerGridX + x, centerGridY + y));
+      }
+    }
+    return features;
+  }
+
+  function refreshMapGrid() {
+    if (map.getSource('square-plots') && userLat && userLng) {
+      map.getSource('square-plots').setData({
+        type: 'FeatureCollection',
+        features: generateSquareGrid(userLat, userLng)
+      });
+    }
+  }
+
+  function updateGoldDisplay() {
+    document.getElementById('gold-amount').innerText = playerGold;
+  }
+
+  function renderSelectedPlotCard() {
+    const container = document.getElementById('plot-info');
+    if (!selectedPlotId) {
+      container.innerHTML = `<i>Tap any square or coin to inspect.</i>`;
+      return;
+    }
+
+    if (claimedPlotIds.has(selectedPlotId)) {
+      container.innerHTML = `
+        <b>Plot ID:</b> ${selectedPlotId}<br/>
+        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span>
+      `;
+    } else {
+      const canAfford = playerGold >= PLOT_PRICE;
+      const buttonText = canAfford ? `🛒 Buy Plot (${PLOT_PRICE} Gold)` : `❌ Need ${PLOT_PRICE} Gold`;
+      const disabledAttr = canAfford ? '' : 'disabled';
+
+      container.innerHTML = `
+        <b>Plot ID:</b> ${selectedPlotId}<br/>
+        <b>Price:</b> 💰 ${PLOT_PRICE} Gold<br/>
+        <b>Status:</b> <span class="badge wild">Wilderness</span><br/>
+        <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>${buttonText}</button>
+      `;
+
+      if (canAfford) {
+        document.getElementById('buy-plot-btn').addEventListener('click', buySelectedPlot);
+      }
+    }
+  }
+
+  function buySelectedPlot() {
+    if (!selectedPlotId || claimedPlotIds.has(selectedPlotId)) return;
+    if (playerGold >= PLOT_PRICE) {
+      playerGold -= PLOT_PRICE;
+      claimedPlotIds.add(selectedPlotId);
+      updateGoldDisplay();
+      renderSelectedPlotCard();
+      refreshMapGrid();
+    }
+  }
+
+  function updateAutoCenterUI() {
+    const btn = document.getElementById('autocenter-button');
+    if (autoCenterEnabled) {
+      btn.className = 'btn autocenter-on';
+      btn.innerText = '🎯 Auto-Center: ON';
+    } else {
+      btn.className = 'btn autocenter-off';
+      btn.innerText = '📍 Auto-Center: OFF (Tap to Lock)';
+    }
+  }
+
+  map.on('load', () => {
+    // Custom Map Style Overrides
+    map.getStyle().layers.forEach(layer => {
+      const id = layer.id.toLowerCase();
+      if (id.includes('building')) map.setLayoutProperty(layer.id, 'visibility', 'none');
+      if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean')) {
+        if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
+        else if (layer.type === 'line') map.setPaintProperty(layer.id, 'line-color', '#1d4ed8');
+      }
+      if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
+      if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood')) && layer.type === 'fill' && !id.includes('water')) {
+        map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
+      }
+      if ((id.includes('road') || id.includes('highway') || id.includes('street')) && layer.type === 'line') {
+        map.setPaintProperty(layer.id, 'line-color', id.includes('case') ? '#5c4028' : '#9e7853');
+      }
+      if (layer.type === 'symbol') map.setLayoutProperty(layer.id, 'visibility', 'none');
+    });
+
+    map.addSource('square-plots', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+
+    map.addLayer({
+      id: 'plots-fill',
+      type: 'fill',
+      source: 'square-plots',
+      paint: { 'fill-color': '#000000', 'fill-opacity': 0 }
+    });
+
+    map.addLayer({
+      id: 'plots-outline',
+      type: 'line',
+      source: 'square-plots',
+      filter: ['all', ['!', ['get', 'isClaimed']], ['!', ['get', 'isSelected']]],
+      paint: { 'line-color': '#1e293b', 'line-width': 2, 'line-opacity': 0.7 }
+    });
+
+    map.addLayer({
+      id: 'plots-selected-outline',
+      type: 'line',
+      source: 'square-plots',
+      filter: ['get', 'isSelected'],
+      paint: { 'line-color': '#ef4444', 'line-width': 4, 'line-opacity': 1.0 }
+    });
+
+    map.addLayer({
+      id: 'plots-claimed-outline',
       type: 'line',
       source: 'square-plots',
       filter: ['get', 'isClaimed'],
@@ -586,7 +960,7 @@
       cleanupDistantCoins();
 
       // First time getting location -> Start Game
-     if (!gameStarted) {
+      if (!gameStarted) {
         gameStarted = true;
         document.getElementById('start-overlay').style.display = 'none';
         document.getElementById('ui-panel').style.display = 'block';
