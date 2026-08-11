@@ -16,9 +16,18 @@
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     
     #ui-panel {
-      position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
-      background: rgba(13, 17, 23, 0.92); color: #e6edf3;
-      padding: 14px 18px; border-radius: 12px; border: 1px solid #30363d;
+      position: absolute; 
+      top: 12px; 
+      left: 12px; 
+      z-index: 10;
+      width: 300px;                       /* Fixed compact width */
+      max-width: calc(100vw - 24px);      /* Ensures it doesn't overflow small screens */
+      box-sizing: border-box;
+      background: rgba(13, 17, 23, 0.92); 
+      color: #e6edf3;
+      padding: 14px 18px; 
+      border-radius: 12px; 
+      border: 1px solid #30363d;
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       font-size: 15px;
     }
