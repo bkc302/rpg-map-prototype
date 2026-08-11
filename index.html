@@ -181,7 +181,7 @@
   }
 
   map.on('load', () => {
-    // 🎨 Custom RPG Style Overrides (Grass Ground, Dirt Roads, Hide Buildings)
+    // 🎨 Custom RPG Style Overrides
     map.getStyle().layers.forEach(layer => {
       const id = layer.id.toLowerCase();
 
@@ -190,15 +190,24 @@
         map.setLayoutProperty(layer.id, 'visibility', 'none');
       }
 
-      // 2. Recolor background and land polygons to grass green
+      // 2. Recolor water polygons and channels to rich RPG blue
+      if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean') || id.includes('sea')) {
+        if (layer.type === 'fill') {
+          map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
+        } else if (layer.type === 'line') {
+          map.setPaintProperty(layer.id, 'line-color', '#1d4ed8');
+        }
+      }
+
+      // 3. Recolor background and land polygons to grass green
       if (layer.type === 'background') {
         map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
       }
-      if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('scrub')) && layer.type === 'fill') {
+      if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('scrub')) && layer.type === 'fill' && !id.includes('water')) {
         map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
       }
 
-      // 3. Recolor roads to dirt paths (earthy brown)
+      // 4. Recolor roads to dirt paths (earthy brown)
       if ((id.includes('road') || id.includes('highway') || id.includes('street') || id.includes('transport')) && layer.type === 'line') {
         if (id.includes('case') || id.includes('outline')) {
           map.setPaintProperty(layer.id, 'line-color', '#5c4028'); // Dark dirt border
@@ -253,7 +262,7 @@
       geolocate.trigger();
     });
 
-    // Toggle Auto-Center state or force center when pressed
+    // Toggle Auto-Center state or force center + zoom level 18
     document.getElementById('autocenter-button').addEventListener('click', () => {
       autoCenterEnabled = !autoCenterEnabled;
       updateAutoCenterUI();
@@ -267,9 +276,18 @@
       }
     });
 
-    // Automatically pause Auto-Center if user manually drags/pans map
+    // Pause Auto-Center if user manually drags/pans map
     map.on('dragstart', () => {
       if (autoCenterEnabled) {
+        autoCenterEnabled = false;
+        updateAutoCenterUI();
+      }
+    });
+
+    // Pause Auto-Center if user manually pinches/scroll zooms
+    map.on('zoomstart', (e) => {
+      // originalEvent exists on manual user gestures, but is undefined on programmatic camera calls
+      if (e.originalEvent && autoCenterEnabled) {
         autoCenterEnabled = false;
         updateAutoCenterUI();
       }
@@ -294,10 +312,11 @@
         features: updatedFeatures
       });
 
-      // Smooth camera follow if auto-center is active
+      // Smooth camera follow enforcing zoom 18 if auto-center is active
       if (autoCenterEnabled) {
         map.easeTo({
           center: [userLng, userLat],
+          zoom: 18,
           duration: 1000,
           essential: true
         });
