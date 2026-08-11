@@ -20,8 +20,8 @@
       top: 12px; 
       left: 12px; 
       z-index: 10;
-      width: 300px;                       /* Fixed compact width */
-      max-width: calc(100vw - 24px);      /* Ensures it doesn't overflow small screens */
+      width: 300px;
+      max-width: calc(100vw - 24px);
       box-sizing: border-box;
       background: rgba(13, 17, 23, 0.92); 
       color: #e6edf3;
@@ -31,19 +31,31 @@
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       font-size: 15px;
     }
-    #ui-panel h3 { margin: 0 0 6px 0; font-size: 18px; }
-    #status { font-size: 14px; color: #38bdf8; margin-bottom: 8px; }
-    #plot-info { margin-top: 8px; font-size: 14px; line-height: 1.4; }
+    #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; }
+    #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 6px; }
+    #status { font-size: 13px; color: #38bdf8; margin-bottom: 8px; }
+    
+    #plot-card {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #30363d;
+      font-size: 14px;
+      line-height: 1.4;
+    }
 
     .btn {
       width: 100%; padding: 10px; color: white;
       border: none; border-radius: 8px; font-weight: bold; font-size: 14px;
       cursor: pointer; margin-top: 6px;
-      transition: background-color 0.2s ease;
+      transition: background-color 0.2s ease, opacity 0.2s ease;
     }
     .gps-btn { background-color: #2563eb; }
     .gps-btn:active { background-color: #1d4ed8; }
     
+    .buy-btn { background-color: #16a34a; }
+    .buy-btn:hover { background-color: #15803d; }
+    .buy-btn:disabled { background-color: #475569; cursor: not-allowed; opacity: 0.6; }
+
     /* Toggle Button States */
     .autocenter-on { background-color: #16a34a; }
     .autocenter-on:active { background-color: #15803d; }
@@ -71,10 +83,7 @@
       filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
       cursor: pointer;
     }
-    .maplibregl-ctrl-top-right {
-      display: none !important;
-    }
-    /* Hide MapLibre attribution box in bottom right */
+    .maplibregl-ctrl-top-right,
     .maplibregl-ctrl-bottom-right {
       display: none !important;
     }
@@ -84,10 +93,14 @@
 
 <div id="ui-panel">
   <h3>⚔️ GPS Land Claimer</h3>
+  <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
   <div id="status">Tap button below to lock GPS</div>
   <button id="gps-button" class="btn gps-btn">📍 Find My Location</button>
   <button id="autocenter-button" class="btn autocenter-on" style="display: none;">🎯 Auto-Center: ON</button>
-  <div id="plot-info"></div>
+  
+  <div id="plot-card">
+    <div id="plot-info"><i>Tap any square on the map to inspect or buy.</i></div>
+  </div>
 </div>
 
 <div id="map"></div>
@@ -96,6 +109,12 @@
   let userLat = 40.7128;
   let userLng = -74.006;
   let autoCenterEnabled = true;
+
+  // Game Economy & Land Ownership State
+  let playerGold = 100;
+  const PLOT_PRICE = 100;
+  const claimedPlotIds = new Set(); // Stores owned plot ID strings
+  let selectedPlotId = null;        // Currently inspected plot ID
 
   // Screen Wake Lock Handler
   let wakeLock = null;
@@ -111,7 +130,6 @@
     }
   }
 
-  // Re-acquire lock if user switches back to the tab
   document.addEventListener('visibilitychange', async () => {
     if (wakeLock !== null && document.visibilityState === 'visible') {
       await requestWakeLock();
@@ -132,13 +150,12 @@
       maximumAge: 0
     },
     trackUserLocation: true,
-    showUserLocation: false, // Disabled default blue dot
+    showUserLocation: false,
     showAccuracyCircle: true
   });
 
   map.addControl(geolocate);
 
-  // Custom player marker element
   const playerEl = document.createElement('div');
   playerEl.className = 'player-marker';
 
@@ -150,27 +167,27 @@
   // ~50 meters North-South
   const PLOT_SIZE_LAT = 0.00045; 
 
-  // Calculate standard E-W longitude size for 1:1 aspect ratio at target latitude
   function getLngSize(lat) {
     const rad = lat * Math.PI / 180;
     return PLOT_SIZE_LAT / Math.cos(rad);
   }
 
-  // Create a polygon feature using precise integer grid boundaries
-  function createPlotFeature(gridX, gridY, lngSize, playerGridX, playerGridY) {
+  function createPlotFeature(gridX, gridY, lngSize) {
     const minLat = gridY * PLOT_SIZE_LAT;
     const maxLat = (gridY + 1) * PLOT_SIZE_LAT;
     const minLng = gridX * lngSize;
     const maxLng = (gridX + 1) * lngSize;
 
     const plotId = `plot_${gridY}_${gridX}`;
-    const isClaimed = (gridX === playerGridX && gridY === playerGridY);
+    const isClaimed = claimedPlotIds.has(plotId);
+    const isSelected = (plotId === selectedPlotId);
 
     return {
       type: 'Feature',
       properties: {
         plotId: plotId,
-        isClaimed: isClaimed
+        isClaimed: isClaimed,
+        isSelected: isSelected
       },
       geometry: {
         type: 'Polygon',
@@ -185,13 +202,11 @@
     };
   }
 
-  // Generate seamless grid surrounding player integer grid tile
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
     const gridRadius = 4;
     const lngSize = getLngSize(centerLat);
 
-    // Convert GPS float coordinates into discrete integer grid indices
     const playerGridY = Math.floor(centerLat / PLOT_SIZE_LAT);
     const playerGridX = Math.floor(centerLng / lngSize);
 
@@ -199,13 +214,72 @@
       for (let y = -gridRadius; y <= gridRadius; y++) {
         const gridX = playerGridX + x;
         const gridY = playerGridY + y;
-        features.push(createPlotFeature(gridX, gridY, lngSize, playerGridX, playerGridY));
+        features.push(createPlotFeature(gridX, gridY, lngSize));
       }
     }
     return features;
   }
 
-  // Helper to update Auto-Center button visuals
+  function refreshMapGrid() {
+    if (map.getSource('square-plots')) {
+      const updatedFeatures = generateSquareGrid(userLat, userLng);
+      map.getSource('square-plots').setData({
+        type: 'FeatureCollection',
+        features: updatedFeatures
+      });
+    }
+  }
+
+  function updateGoldDisplay() {
+    document.getElementById('gold-amount').innerText = playerGold;
+  }
+
+  function renderSelectedPlotCard() {
+    const container = document.getElementById('plot-info');
+
+    if (!selectedPlotId) {
+      container.innerHTML = `<i>Tap any square on the map to inspect or buy.</i>`;
+      return;
+    }
+
+    const isOwned = claimedPlotIds.has(selectedPlotId);
+
+    if (isOwned) {
+      container.innerHTML = `
+        <b>Plot ID:</b> ${selectedPlotId}<br/>
+        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span>
+      `;
+    } else {
+      const canAfford = playerGold >= PLOT_PRICE;
+      const buttonText = canAfford ? `🛒 Buy Plot (${PLOT_PRICE} Gold)` : `❌ Need ${PLOT_PRICE} Gold`;
+      const disabledAttr = canAfford ? '' : 'disabled';
+
+      container.innerHTML = `
+        <b>Plot ID:</b> ${selectedPlotId}<br/>
+        <b>Price:</b> 💰 ${PLOT_PRICE} Gold<br/>
+        <b>Status:</b> <span class="badge wild">Wilderness</span><br/>
+        <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>${buttonText}</button>
+      `;
+
+      if (canAfford) {
+        document.getElementById('buy-plot-btn').addEventListener('click', buySelectedPlot);
+      }
+    }
+  }
+
+  function buySelectedPlot() {
+    if (!selectedPlotId || claimedPlotIds.has(selectedPlotId)) return;
+
+    if (playerGold >= PLOT_PRICE) {
+      playerGold -= PLOT_PRICE;
+      claimedPlotIds.add(selectedPlotId);
+
+      updateGoldDisplay();
+      renderSelectedPlotCard();
+      refreshMapGrid();
+    }
+  }
+
   function updateAutoCenterUI() {
     const btn = document.getElementById('autocenter-button');
     if (autoCenterEnabled) {
@@ -222,12 +296,10 @@
     map.getStyle().layers.forEach(layer => {
       const id = layer.id.toLowerCase();
 
-      // 1. Hide all building polygons & footprints
       if (id.includes('building')) {
         map.setLayoutProperty(layer.id, 'visibility', 'none');
       }
 
-      // 2. Recolor water polygons and channels to rich RPG blue
       if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean') || id.includes('sea')) {
         if (layer.type === 'fill') {
           map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
@@ -236,7 +308,6 @@
         }
       }
 
-      // 3. Recolor background and land polygons to grass green
       if (layer.type === 'background') {
         map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
       }
@@ -244,18 +315,14 @@
         map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
       }
 
-      // 4. Recolor roads to dirt paths (earthy brown)
       if ((id.includes('road') || id.includes('highway') || id.includes('street') || id.includes('transport')) && layer.type === 'line') {
         if (id.includes('case') || id.includes('outline')) {
-          map.setPaintProperty(layer.id, 'line-color', '#5c4028'); // Dark dirt border
+          map.setPaintProperty(layer.id, 'line-color', '#5c4028');
         } else {
-          map.setPaintProperty(layer.id, 'line-color', '#9e7853'); // Dirt path
+          map.setPaintProperty(layer.id, 'line-color', '#9e7853');
         }
       }
-    });
 
-    // 🙈 Hide all text labels, road names, and place markers
-    map.getStyle().layers.forEach(layer => {
       if (layer.type === 'symbol') {
         map.setLayoutProperty(layer.id, 'visibility', 'none');
       }
@@ -268,23 +335,23 @@
       data: { type: 'FeatureCollection', features: initialFeatures }
     });
 
-    // 1. Fill Layer: Completely transparent (keeps click/tap detection active across all squares)
+    // 1. Fill Layer: Transparent fill for tap detection
     map.addLayer({
       id: 'plots-fill',
       type: 'fill',
       source: 'square-plots',
       paint: {
         'fill-color': '#000000',
-        'fill-opacity': 0 // Invisible fill so you can still click/tap plots
+        'fill-opacity': 0
       }
     });
 
-    // 2. Standard Grid Lines (Surrounding wilderness plots)
+    // 2. Standard Grid Lines (Unclaimed & Unselected plots)
     map.addLayer({
       id: 'plots-outline',
       type: 'line',
       source: 'square-plots',
-      filter: ['!', ['get', 'isClaimed']], // Excludes claimed plots so yellow border replaces it
+      filter: ['all', ['!', ['get', 'isClaimed']], ['!', ['get', 'isSelected']]],
       paint: {
         'line-color': '#1e293b',
         'line-width': 2,
@@ -292,26 +359,38 @@
       }
     });
 
-    // 3. Claimed Plot Border: Bold Yellow Square Outline
+    // 3. Selected Plot Outline (Bright Red)
     map.addLayer({
-      id: 'plots-claimed-outline',
+      id: 'plots-selected-outline',
       type: 'line',
       source: 'square-plots',
-      filter: ['get', 'isClaimed'], // Targets ONLY the claimed plot
+      filter: ['get', 'isSelected'],
       paint: {
-        'line-color': '#eab308', // Bright RPG Yellow border
-        'line-width': 4,        // Thicker outline to pop against the map
+        'line-color': '#ef4444', // Bright RPG Red
+        'line-width': 4,
         'line-opacity': 1.0
       }
     });
 
-    // Tap button to manually trigger GPS
+    // 4. Claimed Plot Outline (Bold Yellow Square)
+    map.addLayer({
+      id: 'plots-claimed-outline',
+      type: 'line',
+      source: 'square-plots',
+      filter: ['get', 'isClaimed'],
+      paint: {
+        'line-color': '#eab308', // Bright RPG Yellow
+        'line-width': 4,
+        'line-opacity': 1.0
+      }
+    });
+
+    // GPS Controls
     document.getElementById('gps-button').addEventListener('click', () => {
       document.getElementById('status').innerText = '⌛ Acquiring GPS fix...';
       geolocate.trigger();
     });
 
-    // Toggle Auto-Center state or force center + zoom level 18
     document.getElementById('autocenter-button').addEventListener('click', () => {
       autoCenterEnabled = !autoCenterEnabled;
       updateAutoCenterUI();
@@ -325,7 +404,6 @@
       }
     });
 
-    // Pause Auto-Center if user manually drags/pans map
     map.on('dragstart', () => {
       if (autoCenterEnabled) {
         autoCenterEnabled = false;
@@ -333,7 +411,6 @@
       }
     });
 
-    // Pause Auto-Center if user manually pinches/scroll zooms
     map.on('zoomstart', (e) => {
       if (e.originalEvent && autoCenterEnabled) {
         autoCenterEnabled = false;
@@ -346,24 +423,15 @@
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
 
-      // Keep screen awake while walking around
       requestWakeLock();
 
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
       document.getElementById('gps-button').style.display = 'none';
       document.getElementById('autocenter-button').style.display = 'block';
 
-      // Update custom player image position
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
+      refreshMapGrid();
 
-      // Update grid tiles around new player position
-      const updatedFeatures = generateSquareGrid(userLat, userLng);
-      map.getSource('square-plots').setData({
-        type: 'FeatureCollection',
-        features: updatedFeatures
-      });
-
-      // Smooth camera follow enforcing zoom 18 if auto-center is active
       if (autoCenterEnabled) {
         map.easeTo({
           center: [userLng, userLat],
@@ -374,30 +442,23 @@
       }
     });
 
-    // Detailed Mobile Error Diagnostics
     geolocate.on('error', (e) => {
       console.error('GPS Error Details:', e);
       let errorMsg = 'Unknown GPS Error';
-      
-      if (e.code === 1) errorMsg = 'Permission Denied by OS/Browser';
-      if (e.code === 2) errorMsg = 'Position Unavailable (Weak Signal)';
-      if (e.code === 3) errorMsg = 'GPS Timed Out (Try again outside)';
+      if (e.code === 1) errorMsg = 'Permission Denied';
+      if (e.code === 2) errorMsg = 'Position Unavailable';
+      if (e.code === 3) errorMsg = 'GPS Timed Out';
 
-      document.getElementById('status').innerHTML = 
-        `<span style="color:#ef4444;">⚠️ ${errorMsg}</span>`;
+      document.getElementById('status').innerHTML = `<span style="color:#ef4444;">⚠️ ${errorMsg}</span>`;
     });
 
-    // Inspect Plots
+    // Handle Plot Selection on Click/Tap
     map.on('click', 'plots-fill', (e) => {
-      const props = e.features[0].properties;
-      const statusBadge = props.isClaimed 
-        ? '<span class="badge claimed">Home Base</span>' 
-        : '<span class="badge wild">Wilderness (100 Gold)</span>';
-
-      document.getElementById('plot-info').innerHTML = `
-        <b>Plot ID:</b> ${props.plotId}<br/>
-        <b>Status:</b> ${statusBadge}
-      `;
+      if (e.features.length > 0) {
+        selectedPlotId = e.features[0].properties.plotId;
+        renderSelectedPlotCard();
+        refreshMapGrid();
+      }
     });
   });
 </script>
