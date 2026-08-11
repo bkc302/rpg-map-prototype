@@ -251,24 +251,40 @@
       data: { type: 'FeatureCollection', features: initialFeatures }
     });
 
+	// 1. Fill Layer: Completely transparent (keeps click/tap detection active across all squares)
     map.addLayer({
       id: 'plots-fill',
       type: 'fill',
       source: 'square-plots',
       paint: {
-        'fill-color': ['case', ['get', 'isClaimed'], '#2563eb', '#10b981'],
-        'fill-opacity': 0.35
+        'fill-color': '#000000',
+        'fill-opacity': 0 // Invisible fill so you can still click/tap plots
       }
     });
 
+    // 2. Standard Grid Lines (Surrounding wilderness plots)
     map.addLayer({
       id: 'plots-outline',
       type: 'line',
       source: 'square-plots',
+      filter: ['!', ['get', 'isClaimed']], // Excludes claimed plots so yellow border replaces it
       paint: {
         'line-color': '#1e293b',
         'line-width': 2,
         'line-opacity': 0.7
+      }
+    });
+
+    // 3. Claimed Plot Border: Bold Yellow Square Outline
+    map.addLayer({
+      id: 'plots-claimed-outline',
+      type: 'line',
+      source: 'square-plots',
+      filter: ['get', 'isClaimed'], // Targets ONLY the claimed plot
+      paint: {
+        'line-color': '#eab308', // Bright RPG Yellow border
+        'line-width': 4,        // Thicker outline to pop against the map
+        'line-opacity': 1.0
       }
     });
 
