@@ -97,6 +97,27 @@
   let userLng = -74.006;
   let autoCenterEnabled = true;
 
+  // Screen Wake Lock Handler
+  let wakeLock = null;
+
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('💡 Screen Wake Lock active');
+      } catch (err) {
+        console.warn(`Wake Lock error: ${err.name}, ${err.message}`);
+      }
+    }
+  }
+
+  // Re-acquire lock if user switches back to the tab
+  document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+      await requestWakeLock();
+    }
+  });
+
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -233,17 +254,6 @@
       }
     });
 
-    // Boost text sizes for high-DPI screens
-    //map.getStyle().layers.forEach(layer => {
-      //if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
-        //map.setLayoutProperty(layer.id, 'text-size', [
-          //'interpolate', ['linear'], ['zoom'],
-          //10, 14,
-          //16, 20
-        //]);
-      //}
-    //});
-
     // 🙈 Hide all text labels, road names, and place markers
     map.getStyle().layers.forEach(layer => {
       if (layer.type === 'symbol') {
@@ -258,7 +268,7 @@
       data: { type: 'FeatureCollection', features: initialFeatures }
     });
 
-	// 1. Fill Layer: Completely transparent (keeps click/tap detection active across all squares)
+    // 1. Fill Layer: Completely transparent (keeps click/tap detection active across all squares)
     map.addLayer({
       id: 'plots-fill',
       type: 'fill',
@@ -325,7 +335,6 @@
 
     // Pause Auto-Center if user manually pinches/scroll zooms
     map.on('zoomstart', (e) => {
-      // originalEvent exists on manual user gestures, but is undefined on programmatic camera calls
       if (e.originalEvent && autoCenterEnabled) {
         autoCenterEnabled = false;
         updateAutoCenterUI();
@@ -336,6 +345,9 @@
     geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
+
+      // Keep screen awake while walking around
+      requestWakeLock();
 
       document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
       document.getElementById('gps-button').style.display = 'none';
