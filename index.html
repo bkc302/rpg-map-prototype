@@ -181,6 +181,33 @@
   }
 
   map.on('load', () => {
+    // 🎨 Custom RPG Style Overrides (Grass Ground, Dirt Roads, Hide Buildings)
+    map.getStyle().layers.forEach(layer => {
+      const id = layer.id.toLowerCase();
+
+      // 1. Hide all building polygons & footprints
+      if (id.includes('building')) {
+        map.setLayoutProperty(layer.id, 'visibility', 'none');
+      }
+
+      // 2. Recolor background and land polygons to grass green
+      if (layer.type === 'background') {
+        map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
+      }
+      if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('scrub')) && layer.type === 'fill') {
+        map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
+      }
+
+      // 3. Recolor roads to dirt paths (earthy brown)
+      if ((id.includes('road') || id.includes('highway') || id.includes('street') || id.includes('transport')) && layer.type === 'line') {
+        if (id.includes('case') || id.includes('outline')) {
+          map.setPaintProperty(layer.id, 'line-color', '#5c4028'); // Dark dirt border
+        } else {
+          map.setPaintProperty(layer.id, 'line-color', '#9e7853'); // Dirt path
+        }
+      }
+    });
+
     // Boost text sizes for high-DPI screens
     map.getStyle().layers.forEach(layer => {
       if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
