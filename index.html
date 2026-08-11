@@ -78,25 +78,25 @@
 <div id="map"></div>
 
 <script>
-  let userLat = 40.7128;
-  let userLng = -74.006;
+  let userLat = null;
+  let userLng = null;
   let autoCenterEnabled = true;
   let totalGold = 0;
+  let isGridInitialized = false;
 
   // 🎯 Reach distance configuration (10 meters)
   const REACH_DISTANCE_METERS = 10; 
 
-  // Grid dimensions (~50m latitude height per tile)
+  // Fixed grid dimensions (~50m)
   const PLOT_SIZE_LAT = 0.00045; 
 
-  // Track claimed plots and collected coins persistent in session
   const claimedPlots = new Set();
   const collectedCoins = new Set();
 
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-    center: [userLng, userLat],
+    center: [-74.006, 40.7128],
     zoom: 18
   });
 
@@ -114,7 +114,6 @@
     anchor: 'center'
   });
 
-  // Calculate distance in meters (Haversine)
   function getDistanceMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -126,25 +125,20 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
-  // Deterministic 2D PRNG - Spawns identical coins worldwide for same (x,y)
   function pseudoRandom(x, y) {
     let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123;
     return n - Math.floor(n);
   }
 
-  // Calculate longitude width for a FIXED grid row integer Y
-  function getRowLngSize(gridY) {
-    const rowLat = gridY * PLOT_SIZE_LAT;
-    const rad = rowLat * Math.PI / 180;
+  // Calculate uniform longitude size for surrounding neighborhood to keep vertical lines straight
+  function getUniformLngSize(centerLat) {
+    const rad = centerLat * Math.PI / 180;
     return PLOT_SIZE_LAT / Math.cos(rad);
   }
 
-  function createPlotFeature(gridX, gridY) {
+  function createPlotFeature(gridX, gridY, lngSize) {
     const minLat = gridY * PLOT_SIZE_LAT;
     const maxLat = (gridY + 1) * PLOT_SIZE_LAT;
-
-    // Lock longitude step strictly to grid row latitude (prevents grid movement)
-    const lngSize = getRowLngSize(gridY);
     const minLng = gridX * lngSize;
     const maxLng = (gridX + 1) * lngSize;
 
@@ -155,7 +149,6 @@
     const isClaimed = claimedPlots.has(plotId);
     const isCoinCollected = collectedCoins.has(plotId);
 
-    // Deterministic World Spawner (~35% tile coin chance globally)
     const rawCoinRoll = pseudoRandom(gridX, gridY);
     const hasCoin = rawCoinRoll < 0.35 && !isCoinCollected && !isClaimed;
 
@@ -183,18 +176,63 @@
 
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
-    const gridRadius = 8; // Render ~800m range around player
+    const gridRadius = 8;
+    const lngSize = getUniformLngSize(centerLat);
 
     const playerGridY = Math.floor(centerLat / PLOT_SIZE_LAT);
-    const playerRowLngSize = getRowLngSize(playerGridY);
-    const playerGridX = Math.floor(centerLng / playerRowLngSize);
+    const playerGridX = Math.floor(centerLng / lngSize);
 
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        features.push(createPlotFeature(playerGridX + x, playerGridY + y));
+        features.push(createPlotFeature(playerGridX + x, playerGridY + y, lngSize));
       }
     }
     return features;
+  }
+
+  function initializeGridLayers(lat, lng) {
+    const initialFeatures = generateSquareGrid(lat, lng);
+
+    map.addSource('square-plots', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: initialFeatures }
+    });
+
+    map.addLayer({
+      id: 'plots-fill',
+      type: 'fill',
+      source: 'square-plots',
+      paint: {
+        'fill-color': ['case', ['get', 'isClaimed'], '#2563eb', '#10b981'],
+        'fill-opacity': ['case', ['get', 'isClaimed'], 0.45, 0.2]
+      }
+    });
+
+    map.addLayer({
+      id: 'plots-outline',
+      type: 'line',
+      source: 'square-plots',
+      paint: {
+        'line-color': '#1e293b',
+        'line-width': 1.5,
+        'line-opacity': 0.6
+      }
+    });
+
+    map.addLayer({
+      id: 'plots-coins',
+      type: 'symbol',
+      source: 'square-plots',
+      filter: ['get', 'hasCoin'],
+      layout: {
+        'text-field': '🪙',
+        'text-size': 22,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true
+      }
+    });
+
+    isGridInitialized = true;
   }
 
   function updateAutoCenterUI() {
@@ -209,63 +247,6 @@
   }
 
   map.on('load', () => {
-    // RPG Style Overrides
-    map.getStyle().layers.forEach(layer => {
-      const id = layer.id.toLowerCase();
-      if (id.includes('building')) map.setLayoutProperty(layer.id, 'visibility', 'none');
-      if (id.includes('water') || id.includes('river') || id.includes('lake')) {
-        if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
-      }
-      if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
-      if ((id.includes('land') || id.includes('park') || id.includes('green')) && layer.type === 'fill' && !id.includes('water')) {
-        map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
-      }
-    });
-
-    const initialFeatures = generateSquareGrid(userLat, userLng);
-
-    map.addSource('square-plots', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: initialFeatures }
-    });
-
-    // Plot Fills
-    map.addLayer({
-      id: 'plots-fill',
-      type: 'fill',
-      source: 'square-plots',
-      paint: {
-        'fill-color': ['case', ['get', 'isClaimed'], '#2563eb', '#10b981'],
-        'fill-opacity': ['case', ['get', 'isClaimed'], 0.45, 0.2]
-      }
-    });
-
-    // Plot Outlines
-    map.addLayer({
-      id: 'plots-outline',
-      type: 'line',
-      source: 'square-plots',
-      paint: {
-        'line-color': '#1e293b',
-        'line-width': 1.5,
-        'line-opacity': 0.6
-      }
-    });
-
-    // 🪙 World Coin Overlay Layer
-    map.addLayer({
-      id: 'plots-coins',
-      type: 'symbol',
-      source: 'square-plots',
-      filter: ['get', 'hasCoin'],
-      layout: {
-        'text-field': '🪙',
-        'text-size': 22,
-        'text-allow-overlap': true,
-        'text-ignore-placement': true
-      }
-    });
-
     document.getElementById('gps-button').addEventListener('click', () => {
       document.getElementById('status').innerText = '⌛ Acquiring GPS fix...';
       geolocate.trigger();
@@ -274,10 +255,17 @@
     document.getElementById('autocenter-button').addEventListener('click', () => {
       autoCenterEnabled = !autoCenterEnabled;
       updateAutoCenterUI();
-      if (autoCenterEnabled) map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
+      if (autoCenterEnabled && userLat && userLng) {
+        map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
+      }
     });
 
-    map.on('dragstart', () => { if (autoCenterEnabled) { autoCenterEnabled = false; updateAutoCenterUI(); } });
+    map.on('dragstart', () => { 
+      if (autoCenterEnabled) { 
+        autoCenterEnabled = false; 
+        updateAutoCenterUI(); 
+      } 
+    });
 
     geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
@@ -289,19 +277,24 @@
 
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
 
-      // Refresh surrounding grid
-      map.getSource('square-plots').setData({
-        type: 'FeatureCollection',
-        features: generateSquareGrid(userLat, userLng)
-      });
+      // Lazy-load grid only AFTER user position is located
+      if (!isGridInitialized) {
+        initializeGridLayers(userLat, userLng);
+      } else {
+        map.getSource('square-plots').setData({
+          type: 'FeatureCollection',
+          features: generateSquareGrid(userLat, userLng)
+        });
+      }
 
       if (autoCenterEnabled) {
         map.easeTo({ center: [userLng, userLat], zoom: 18, duration: 1000, essential: true });
       }
     });
 
-    // Click Interaction (Checks 10m range)
     map.on('click', 'plots-fill', (e) => {
+      if (!userLat || !userLng) return;
+
       const props = e.features[0].properties;
       const distMeters = getDistanceMeters(userLat, userLng, props.centerLat, props.centerLng);
       const isReachable = distMeters <= REACH_DISTANCE_METERS;
