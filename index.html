@@ -862,18 +862,21 @@
     if (!gameStarted) {
       gameStarted = true;
       document.getElementById('start-overlay').style.display = 'none';
-      document.getElementById('ui-panel').style.display = 'block';
+      
+      const uiPanel = document.getElementById('ui-panel');
+      uiPanel.style.display = 'block';
+      uiPanel.style.zIndex = '1000'; // <-- Ensures UI sits above the player (100)
       
       updateGoldDisplay();
       updateInventoryDisplay();
-
+    
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
       refreshMapGrid();
       spawnTrees(); // Spawn decorative trees for the local grid
       initCoinSpawns();
       spawnNPC();
       initNPCMovement();
-
+    
       map.jumpTo({ center: [userLng, userLat], zoom: 18 });
     } else {
       playerMarker.setLngLat([userLng, userLat]);
