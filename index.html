@@ -230,20 +230,28 @@
     anchor: 'center'
   });
 
-  // Fixed degree step (~50 meters N-S, ~39 meters E-W in mid-latitudes)
-  const LAT_GRID_SIZE_DEG = 0.00045;
+  // Global degree steps
+  const LAT_GRID_SIZE_DEG = 0.00045; // Fixed height (~50m)
+  let LNG_GRID_SIZE_DEG = 0.00045;   // Calculated ONCE on startup for 1:1 square ratio
+  let gridInitialized = false;
   
-  // Dynamic function to get the matching longitude step in degrees
-  // so the plot is a perfect ~50m x 50m square on real ground
+  // Call this ONCE when first GPS position is acquired
+  function initGridScaling(lat) {
+    if (gridInitialized) return;
+    const rad = lat * Math.PI / 180;
+    LNG_GRID_SIZE_DEG = LAT_GRID_SIZE_DEG / Math.cos(rad);
+    gridInitialized = true;
+  }
+  
+  // Dynamic function to get the matching longitude step in degrees for a given row
   function getLngGridSizeDeg(lat) {
     const rad = lat * Math.PI / 180;
     return LAT_GRID_SIZE_DEG / Math.cos(rad);
-  }  
-
+  } 
+  
   function latLngToGrid(lat, lng) {
-    const lngStep = getLngGridSizeDeg(lat);
     return {
-      gridX: Math.floor(lng / lngStep),
+      gridX: Math.floor(lng / LNG_GRID_SIZE_DEG),
       gridY: Math.floor(lat / LAT_GRID_SIZE_DEG)
     };
   }
@@ -305,12 +313,10 @@
   
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
   
+      // Updated position calculation using global constant
       const pos = POSITIONS[slotIndex];
-      
-      // Calculate precise latitude and longitude using dynamic square sizing
       const goldLat = (targetGridY + pos.y) * LAT_GRID_SIZE_DEG;
-      const lngStep = getLngGridSizeDeg(goldLat);
-      const goldLng = (targetGridX + pos.x) * lngStep;
+      const goldLng = (targetGridX + pos.x) * LNG_GRID_SIZE_DEG;
   
       const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
       const coinValue = weights[Math.floor(Math.random() * weights.length)];
@@ -390,14 +396,13 @@
     }
   }
 
-  function createPlotFeature(gridX, gridY, centerLat) {
-    const lngStep = getLngGridSizeDeg(centerLat);
-    
+  function createPlotFeature(gridX, gridY) {
     const minLat = gridY * LAT_GRID_SIZE_DEG;
     const maxLat = (gridY + 1) * LAT_GRID_SIZE_DEG;
     
-    const minLng = gridX * lngStep;
-    const maxLng = (gridX + 1) * lngStep;
+    // Straight, continuous vertical lines across all rows!
+    const minLng = gridX * LNG_GRID_SIZE_DEG;
+    const maxLng = (gridX + 1) * LNG_GRID_SIZE_DEG;
   
     const plotId = `plot_${gridY}_${gridX}`;
   
@@ -423,8 +428,7 @@
   
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        // Pass centerLat to generate dynamic square aspect ratio
-        features.push(createPlotFeature(centerGridX + x, centerGridY + y, centerLat));
+        features.push(createPlotFeature(centerGridX + x, centerGridY + y));
       }
     }
     return features;
@@ -515,6 +519,9 @@
   geolocate.on('geolocate', (e) => {
     userLat = e.coords.latitude;
     userLng = e.coords.longitude;
+	
+    // Locks longitude scaling ONCE to user's location
+    initGridScaling(userLat);
 
     requestWakeLock();
     cleanupDistantCoins();
