@@ -231,12 +231,20 @@
   });
 
   // Fixed degree step (~50 meters N-S, ~39 meters E-W in mid-latitudes)
-  const GRID_SIZE_DEG = 0.00045;
+  const LAT_GRID_SIZE_DEG = 0.00045;
+  
+  // Dynamic function to get the matching longitude step in degrees
+  // so the plot is a perfect ~50m x 50m square on real ground
+  function getLngGridSizeDeg(lat) {
+    const rad = lat * Math.PI / 180;
+    return LAT_GRID_SIZE_DEG / Math.cos(rad);
+  }  
 
   function latLngToGrid(lat, lng) {
+    const lngStep = getLngGridSizeDeg(lat);
     return {
-      gridX: Math.floor(lng / GRID_SIZE_DEG),
-      gridY: Math.floor(lat / GRID_SIZE_DEG)
+      gridX: Math.floor(lng / lngStep),
+      gridY: Math.floor(lat / LAT_GRID_SIZE_DEG)
     };
   }
 
@@ -264,14 +272,14 @@
 
   function spawnSingleCoin() {
     if (!userLat || !userLng) return;
-
+  
     cleanupDistantCoins();
-
+  
     if (activeGoldNodes.length >= MAX_GOLD_NODES) return;
-
+  
     const gridRadius = 3;
     const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
-
+  
     const POSITIONS = [
       { x: 0.50, y: 0.50 },
       { x: 0.20, y: 0.20 },
@@ -283,30 +291,33 @@
       { x: 0.20, y: 0.50 },
       { x: 0.80, y: 0.50 }
     ];
-
+  
     for (let attempt = 0; attempt < 15; attempt++) {
       const offsetX = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
       const offsetY = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
-
+  
       const targetGridX = playerGridX + offsetX;
       const targetGridY = playerGridY + offsetY;
       const cellId = `plot_${targetGridY}_${targetGridX}`;
-
+  
       const slotIndex = Math.floor(Math.random() * POSITIONS.length);
       const slotId = `${cellId}_slot_${slotIndex}`;
-
+  
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
-
+  
       const pos = POSITIONS[slotIndex];
-      const goldLat = (targetGridY + pos.y) * GRID_SIZE_DEG;
-      const goldLng = (targetGridX + pos.x) * GRID_SIZE_DEG;
-
+      
+      // Calculate precise latitude and longitude using dynamic square sizing
+      const goldLat = (targetGridY + pos.y) * LAT_GRID_SIZE_DEG;
+      const lngStep = getLngGridSizeDeg(goldLat);
+      const goldLng = (targetGridX + pos.x) * lngStep;
+  
       const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
       const coinValue = weights[Math.floor(Math.random() * weights.length)];
-
+  
       const goldContainer = document.createElement('div');
       goldContainer.className = 'gold-marker-container';
-
+  
       const goldImg = document.createElement('img');
       goldImg.className = 'gold-marker-icon';
       goldImg.src = 'gold.png';
@@ -315,14 +326,14 @@
         this.src = GOLD_SVG_FALLBACK;
       };
       goldContainer.appendChild(goldImg);
-
+  
       const nodeId = `coin_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-
+  
       const marker = new maplibregl.Marker({
         element: goldContainer,
         anchor: 'center'
       }).setLngLat([goldLng, goldLat]).addTo(map);
-
+  
       const goldNode = { 
         id: nodeId, 
         cellId: cellId, 
@@ -334,12 +345,12 @@
       };
       
       activeGoldNodes.push(goldNode);
-
+  
       goldContainer.addEventListener('click', (e) => {
         e.stopPropagation();
         const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
         const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
-
+  
         document.getElementById('plot-info').innerHTML = `
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
@@ -347,7 +358,7 @@
           <small style="color:#94a3b8;">Walk within 10m to pick up!</small>
         `;
       });
-
+  
       break;
     }
   }
@@ -379,14 +390,17 @@
     }
   }
 
-  function createPlotFeature(gridX, gridY) {
-    const minLat = gridY * GRID_SIZE_DEG;
-    const maxLat = (gridY + 1) * GRID_SIZE_DEG;
-    const minLng = gridX * GRID_SIZE_DEG;
-    const maxLng = (gridX + 1) * GRID_SIZE_DEG;
-
+  function createPlotFeature(gridX, gridY, centerLat) {
+    const lngStep = getLngGridSizeDeg(centerLat);
+    
+    const minLat = gridY * LAT_GRID_SIZE_DEG;
+    const maxLat = (gridY + 1) * LAT_GRID_SIZE_DEG;
+    
+    const minLng = gridX * lngStep;
+    const maxLng = (gridX + 1) * lngStep;
+  
     const plotId = `plot_${gridY}_${gridX}`;
-
+  
     return {
       type: 'Feature',
       properties: {
@@ -404,12 +418,13 @@
   function generateSquareGrid(centerLat, centerLng) {
     const features = [];
     const gridRadius = 4;
-
+  
     const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(centerLat, centerLng);
-
+  
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        features.push(createPlotFeature(centerGridX + x, centerGridY + y));
+        // Pass centerLat to generate dynamic square aspect ratio
+        features.push(createPlotFeature(centerGridX + x, centerGridY + y, centerLat));
       }
     }
     return features;
@@ -633,4 +648,3 @@
 </script>
 </body>
 </html>
-
