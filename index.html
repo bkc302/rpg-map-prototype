@@ -107,11 +107,20 @@
       justify-content: center;
     }
 
-    /* Resized NPC container to match player dimensions exactly */
     .npc-marker-container {
       width: 48px;
       height: 48px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 96x96 Tree Marker Container */
+    .tree-marker-container {
+      width: 96px;
+      height: 96px;
+      pointer-events: none; /* Decorative only */
       display: flex;
       align-items: center;
       justify-content: center;
@@ -144,6 +153,15 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
+    }
+
+    .tree-marker-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.4));
     }
 
     @keyframes bounce {
@@ -209,18 +227,23 @@
 
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
-  const MAX_GOLD_NODES = 15;
-  const PICKUP_RADIUS_METERS = 12;
-  const MAX_DESPAWN_DISTANCE_METERS = 250;
-
+  const MAX_GOLD_NODES = 20;
+  const PICKUP_RADIUS_FEET = 60;
+  const MAX_DESPAWN_DISTANCE_FEET = 800;
+  
   // NPC Merchant State
   let npcNode = null;
-  const NPC_TALK_RADIUS_METERS = 20;
+  const NPC_TALK_RADIUS_FEET = 100;
+
+  // Tree Decoration System
+  let activeTreeNodes = [];
+  let currentGridCenterKey = null; // Tracks player grid center to avoid unnecessary tree respawns
 
   // SVG Fallback Data URIs
   const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
   const GOLD_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23facc15' stroke='%23b45309' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3Ctext x='16' y='21' font-size='13' font-weight='bold' text-anchor='middle' fill='%23854d0e' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E";
   const NPC_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%237c3aed' stroke='%235b21b6' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fde047'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%235b21b6'/%3E%3C/svg%3E";
+  const TREE_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect x='42' y='60' width='12' height='28' fill='%2378350f' rx='2'/%3E%3Cpolygon points='48,8 18,50 78,50' fill='%2315803d'/%3E%3Cpolygon points='48,22 24,62 72,62' fill='%2316a34a'/%3E%3C/svg%3E";
 
   let wakeLock = null;
   async function requestWakeLock() {
@@ -254,6 +277,8 @@
   // Player Marker Construction using <img> with onerror fallback
   const playerContainer = document.createElement('div');
   playerContainer.className = 'player-marker-container';
+  
+  playerContainer.style.zIndex = '100';
 
   const playerImg = document.createElement('img');
   playerImg.className = 'player-marker-icon';
@@ -288,23 +313,112 @@
     };
   }
 
-  function getDistanceMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
+  // Returns distance in feet instead of meters
+  function getDistanceFeet(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Radius of Earth in meters
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    
+    return distanceMeters * 3.28084; // Convert meters to feet
   }
 
-  function spawnNPC() {
-    if (!userLat || !userLng || npcNode) return;
+  // Clears active tree markers
+  function clearTrees() {
+    activeTreeNodes.forEach(node => node.marker.remove());
+    activeTreeNodes = [];
+  }
 
-    const gridRadius = 4; // Spawns within the 9x9 grid (-4 to +4)
+  // Spawns up to 30 trees (max 1 per tile) in the 9x9 active grid
+  function spawnTrees() {
+    if (!userLat || !userLng) return;
+
+    const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
+    const newCenterKey = `${centerGridY}_${centerGridX}`;
+
+    // Avoid rebuilding trees if player hasn't moved to a new grid tile center
+    if (currentGridCenterKey === newCenterKey) {
+      updateTreeVisibility();
+      return;
+    }
+
+    currentGridCenterKey = newCenterKey;
+    clearTrees();
+
+    const gridRadius = 4;
+    const availableTiles = [];
+
+    // Collect all 81 tiles in the 9x9 grid
+    for (let x = -gridRadius; x <= gridRadius; x++) {
+      for (let y = -gridRadius; y <= gridRadius; y++) {
+        availableTiles.push({ gridX: centerGridX + x, gridY: centerGridY + y });
+      }
+    }
+
+    // Shuffle available tiles
+    for (let i = availableTiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [availableTiles[i], availableTiles[j]] = [availableTiles[j], availableTiles[i]];
+    }
+
+    // Pick max 30 tiles (1 tree per selected tile)
+    const treeCount = Math.min(30, availableTiles.length);
+    const selectedTiles = availableTiles.slice(0, treeCount);
+
+    selectedTiles.forEach(tile => {
+      // Place tree directly at the tile center
+      const treeLat = (tile.gridY + 0.50) * LAT_GRID_SIZE_DEG;
+      const treeLng = (tile.gridX + 0.50) * LNG_GRID_SIZE_DEG;
+
+      const treeContainer = document.createElement('div');
+      treeContainer.className = 'tree-marker-container';
+
+      const treeImg = document.createElement('img');
+      treeImg.className = 'tree-marker-icon';
+      treeImg.src = 'tree.png';
+      treeImg.onerror = function() {
+        this.onerror = null;
+        this.src = TREE_SVG_FALLBACK;
+      };
+      treeContainer.appendChild(treeImg);
+
+      const marker = new maplibregl.Marker({
+        element: treeContainer,
+        anchor: 'center'
+      }).setLngLat([treeLng, treeLat]).addTo(map);
+
+      activeTreeNodes.push({
+        marker: marker,
+        element: treeContainer
+      });
+    });
+
+    updateTreeVisibility();
+  }
+
+  // Toggles tree visibility so they are only displayed at zoom level >= 18
+  function updateTreeVisibility() {
+    const isVisible = map.getZoom() >= 17.5;
+    activeTreeNodes.forEach(node => {
+      node.element.style.display = isVisible ? 'flex' : 'none';
+    });
+  }
+
+  // Spawns Timber Pete inside the player's 9x9 grid
+  function spawnNPC() {
+    if (!userLat || !userLng) return;
+
+    if (npcNode && npcNode.marker) {
+      npcNode.marker.remove();
+      npcNode = null;
+    }
+
+    const gridRadius = 4;
     const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
 
-    // Select a random offset within 9x9, avoiding (0,0) center
     let offsetX = 0;
     let offsetY = 0;
     while (offsetX === 0 && offsetY === 0) {
@@ -315,7 +429,6 @@
     const targetGridX = playerGridX + offsetX;
     const targetGridY = playerGridY + offsetY;
 
-    // Center NPC inside the chosen tile
     const npcLat = (targetGridY + 0.50) * LAT_GRID_SIZE_DEG;
     const npcLng = (targetGridX + 0.50) * LNG_GRID_SIZE_DEG;
 
@@ -324,7 +437,7 @@
 
     const npcImg = document.createElement('img');
     npcImg.className = 'npc-marker-icon';
-    npcImg.src = 'npc.png'; // Points directly to custom npc.png asset
+    npcImg.src = 'npc.png';
     npcImg.onerror = function() {
       this.onerror = null;
       this.src = NPC_SVG_FALLBACK;
@@ -347,46 +460,98 @@
       renderNPCCard();
     });
   }
+  
+  function moveNPC() {
+    if (!npcNode || !userLat || !userLng) return;
+
+    const gridRadius = 4;
+    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
+
+    const currentGridX = Math.floor(npcNode.lng / LNG_GRID_SIZE_DEG);
+    const currentGridY = Math.floor(npcNode.lat / LAT_GRID_SIZE_DEG);
+
+    const offsetX = Math.floor(Math.random() * 3) - 1;
+    const offsetY = Math.floor(Math.random() * 3) - 1;
+
+    let newGridX = currentGridX + offsetX;
+    let newGridY = currentGridY + offsetY;
+
+    const minGridX = playerGridX - gridRadius;
+    const maxGridX = playerGridX + gridRadius;
+    const minGridY = playerGridY - gridRadius;
+    const maxGridY = playerGridY + gridRadius;
+
+    newGridX = Math.max(minGridX, Math.min(maxGridX, newGridX));
+    newGridY = Math.max(minGridY, Math.min(maxGridY, newGridY));
+
+    npcNode.lat = (newGridY + 0.50) * LAT_GRID_SIZE_DEG;
+    npcNode.lng = (newGridX + 0.50) * LNG_GRID_SIZE_DEG;
+
+    npcNode.marker.setLngLat([npcNode.lng, npcNode.lat]);
+
+    const infoElem = document.getElementById('plot-info');
+    if (infoElem && infoElem.innerText.includes('Timber Pete')) {
+      renderNPCCard();
+    }
+  }
+  
+  function checkNPCProximity() {
+    if (!npcNode || !userLat || !userLng) return;
+
+    const gridRadius = 4;
+    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
+    const npcGridX = Math.floor(npcNode.lng / LNG_GRID_SIZE_DEG);
+    const npcGridY = Math.floor(npcNode.lat / LAT_GRID_SIZE_DEG);
+
+    if (Math.abs(npcGridX - playerGridX) > gridRadius || Math.abs(npcGridY - playerGridY) > gridRadius) {
+      spawnNPC();
+    }
+  }
+
+  function initNPCMovement() {
+    const FOUR_MINUTES_MS = 1 * 60 * 1000;
+    setInterval(moveNPC, FOUR_MINUTES_MS);
+  }
 
   function renderNPCCard() {
     if (!npcNode || !userLat || !userLng) return;
-
-    const dist = getDistanceMeters(userLat, userLng, npcNode.lat, npcNode.lng);
+  
+    const dist = getDistanceFeet(userLat, userLng, npcNode.lat, npcNode.lng);
     const distRounded = dist.toFixed(0);
-    const inRange = dist <= NPC_TALK_RADIUS_METERS;
+    const inRange = dist <= NPC_TALK_RADIUS_FEET;
     const hasAxe = playerInventory.has('axe');
     const container = document.getElementById('plot-info');
-
+  
     if (!inRange) {
       container.innerHTML = `
-        <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
-        <b>Distance:</b> ${distRounded}m away<br/>
-        <small style="color:#ef4444;">Walk within 20m to trade with him!</small>
+        <b>Timber Pete:</b><br/>
+        <b>Distance:</b> ${distRounded} ft away<br/>
+        <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
       `;
       return;
     }
-
+  
     if (hasAxe) {
       container.innerHTML = `
-        <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
+        <b>Timber Pete:</b><br/>
         <i>"Good luck out there with that axe, adventurer!"</i><br/>
         <small style="color:#a855f7;">✨ You already own the Lumberjack Axe.</small>
       `;
       return;
     }
-
+  
     const canAfford = playerGold >= AXE_PRICE;
     const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
     const disabledAttr = canAfford ? '' : 'disabled';
-
+  
     container.innerHTML = `
-      <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
+      <b>Timber Pete:</b><br/>
       <i>"Need something for chopping wood?"</i><br/>
       <b>Item:</b> 🪓 Lumberjack Axe<br/>
       <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
       <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
     `;
-
+  
     if (canAfford) {
       document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
     }
@@ -411,8 +576,8 @@
     if (!userLat || !userLng) return;
     for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
       const node = activeGoldNodes[i];
-      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
-      if (dist > MAX_DESPAWN_DISTANCE_METERS) {
+      const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
+      if (dist > MAX_DESPAWN_DISTANCE_FEET) {
         node.marker.remove();
         activeGoldNodes.splice(i, 1);
       }
@@ -494,14 +659,14 @@
   
       goldContainer.addEventListener('click', (e) => {
         e.stopPropagation();
-        const dist = getDistanceMeters(userLat, userLng, goldLat, goldLng).toFixed(0);
+        const dist = getDistanceFeet(userLat, userLng, goldLat, goldLng).toFixed(0);
         const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
-  
+      
         document.getElementById('plot-info').innerHTML = `
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
-          <b>Distance:</b> ${dist}m away<br/>
-          <small style="color:#94a3b8;">Walk within 12m to pick up!</small>
+          <b>Distance:</b> ${dist} ft away<br/>
+          <small style="color:#94a3b8;">Walk within 60 ft to pick up!</small>
         `;
       });
   
@@ -520,9 +685,9 @@
   function checkCoinProximity() {
     for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
       const node = activeGoldNodes[i];
-      const dist = getDistanceMeters(userLat, userLng, node.lat, node.lng);
-
-      if (dist <= PICKUP_RADIUS_METERS) {
+      const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
+  
+      if (dist <= PICKUP_RADIUS_FEET) {
         playerGold += node.value;
         
         localStorage.setItem('rpg_player_gold', playerGold);
@@ -704,21 +869,26 @@
 
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
       refreshMapGrid();
+      spawnTrees(); // Spawn decorative trees for the local grid
       initCoinSpawns();
       spawnNPC();
+      initNPCMovement();
 
       map.jumpTo({ center: [userLng, userLat], zoom: 18 });
     } else {
       playerMarker.setLngLat([userLng, userLat]);
       refreshMapGrid();
+      spawnTrees(); // Update trees if user shifted tiles
       checkCoinProximity();
+      checkNPCProximity();
 
       if (autoCenterEnabled) {
         map.easeTo({ center: [userLng, userLat], zoom: 18, duration: 1000, essential: true });
       }
     }
 
-    document.getElementById('status').innerText = `📍 Signal Active (${e.coords.accuracy.toFixed(0)}m accuracy)`;
+    const accuracyFt = (e.coords.accuracy * 3.28084).toFixed(0);
+    document.getElementById('status').innerText = `📍 Signal Active (${accuracyFt} ft accuracy)`;
   });
 
   geolocate.on('error', (e) => {
@@ -795,6 +965,9 @@
       paint: { 'line-color': '#eab308', 'line-width': 4, 'line-opacity': 1.0 }
     });
 
+    // Update tree visibility dynamically as zoom changes
+    map.on('zoom', updateTreeVisibility);
+
     map.on('dragstart', () => {
       if (autoCenterEnabled) {
         autoCenterEnabled = false;
@@ -819,6 +992,7 @@
 
     if (userLat && userLng) {
       refreshMapGrid();
+      spawnTrees();
     }
   });
 </script>
