@@ -175,8 +175,8 @@
 
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
-  const MAX_GOLD_NODES = 10;
-  const PICKUP_RADIUS_METERS = 10;
+  const MAX_GOLD_NODES = 15;
+  const PICKUP_RADIUS_METERS = 12;
   const MAX_DESPAWN_DISTANCE_METERS = 250;
 
   // SVG Fallback Data URIs
@@ -361,7 +361,7 @@
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
           <b>Distance:</b> ${dist}m away<br/>
-          <small style="color:#94a3b8;">Walk within 10m to pick up!</small>
+          <small style="color:#94a3b8;">Walk within 12m to pick up!</small>
         `;
       });
   
