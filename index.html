@@ -365,7 +365,7 @@
     }
 
     // Pick max 30 tiles (1 tree per selected tile)
-    const treeCount = Math.min(30, availableTiles.length);
+    const treeCount = Math.min(15, availableTiles.length);
     const selectedTiles = availableTiles.slice(0, treeCount);
 
     selectedTiles.forEach(tile => {
@@ -509,7 +509,7 @@
   }
 
   function initNPCMovement() {
-    const FOUR_MINUTES_MS = 1 * 60 * 1000;
+    const FOUR_MINUTES_MS = 4 * 60 * 1000;
     setInterval(moveNPC, FOUR_MINUTES_MS);
   }
 
