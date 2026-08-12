@@ -52,7 +52,8 @@
       display: none; /* Hidden until game starts */
     }
     #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; }
-    #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 6px; }
+    #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 2px; }
+    #inventory-display { font-size: 13px; color: #a855f7; margin-bottom: 6px; font-weight: 500; }
     #status { font-size: 13px; color: #38bdf8; margin-bottom: 8px; }
     
     #plot-card {
@@ -106,6 +107,16 @@
       justify-content: center;
     }
 
+    /* Resized NPC container to match player dimensions exactly */
+    .npc-marker-container {
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* Inner Marker Visual Elements */
     .player-marker-icon {
       width: 100%;
@@ -124,6 +135,15 @@
       image-rendering: crisp-edges;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.6));
       animation: bounce 2s ease-in-out infinite;
+    }
+
+    .npc-marker-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
     }
 
     @keyframes bounce {
@@ -151,16 +171,17 @@
 <div id="ui-panel">
   <h3>⚔️ GPS Land Claimer</h3>
   <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
+  <div id="inventory-display">🎒 Inventory: <span id="inventory-list">Empty</span></div>
   <div id="status">GPS Active</div>
   <button id="autocenter-button" class="btn autocenter-on">🎯 Auto-Center: ON</button>
   
   <div id="plot-card">
-    <div id="plot-info"><i>Tap any square or coin to inspect.</i></div>
+    <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
   </div>
 
-  <!-- 🛠️ Dev Reset Button -->
+  <!-- Dev Reset Button -->
   <button id="dev-reset-btn" style="margin-top: 12px; width: 100%; padding: 6px; background: #991b1b; color: #fecaca; border: 1px solid #dc2626; border-radius: 6px; font-size: 11px; cursor: pointer;">
-    ⚠️ Dev: Reset Gold & Land
+    ⚠️ Dev: Reset Game Save
   </button>
 </div>
 
@@ -172,12 +193,18 @@
   let gameStarted = false;
   let autoCenterEnabled = true;
 
-  // Game Economy & Land Ownership State
+  // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
   let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 100;
   const PLOT_PRICE = 100;
+  const AXE_PRICE = 20;
+  
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
   const claimedPlotIds = new Set(savedPlots);
+  
+  const savedInventory = JSON.parse(localStorage.getItem('rpg_player_inventory') || '[]');
+  const playerInventory = new Set(savedInventory);
+
   let selectedPlotId = null;
 
   // Gold Spawning & Gathering System
@@ -186,9 +213,14 @@
   const PICKUP_RADIUS_METERS = 12;
   const MAX_DESPAWN_DISTANCE_METERS = 250;
 
+  // NPC Merchant State
+  let npcNode = null;
+  const NPC_TALK_RADIUS_METERS = 20;
+
   // SVG Fallback Data URIs
   const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
   const GOLD_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23facc15' stroke='%23b45309' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3Ctext x='16' y='21' font-size='13' font-weight='bold' text-anchor='middle' fill='%23854d0e' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E";
+  const NPC_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%237c3aed' stroke='%235b21b6' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fde047'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%235b21b6'/%3E%3C/svg%3E";
 
   let wakeLock = null;
   async function requestWakeLock() {
@@ -242,19 +274,12 @@
   let LNG_GRID_SIZE_DEG = 0.00045;   // Calculated ONCE on startup for 1:1 square ratio
   let gridInitialized = false;
   
-  // Call this ONCE when first GPS position is acquired
   function initGridScaling(lat) {
     if (gridInitialized) return;
     const rad = lat * Math.PI / 180;
     LNG_GRID_SIZE_DEG = LAT_GRID_SIZE_DEG / Math.cos(rad);
     gridInitialized = true;
   }
-  
-  // Dynamic function to get the matching longitude step in degrees for a given row
-  function getLngGridSizeDeg(lat) {
-    const rad = lat * Math.PI / 180;
-    return LAT_GRID_SIZE_DEG / Math.cos(rad);
-  } 
   
   function latLngToGrid(lat, lng) {
     return {
@@ -271,6 +296,115 @@
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function spawnNPC() {
+    if (!userLat || !userLng || npcNode) return;
+
+    const gridRadius = 4; // Spawns within the 9x9 grid (-4 to +4)
+    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
+
+    // Select a random offset within 9x9, avoiding (0,0) center
+    let offsetX = 0;
+    let offsetY = 0;
+    while (offsetX === 0 && offsetY === 0) {
+      offsetX = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
+      offsetY = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
+    }
+
+    const targetGridX = playerGridX + offsetX;
+    const targetGridY = playerGridY + offsetY;
+
+    // Center NPC inside the chosen tile
+    const npcLat = (targetGridY + 0.50) * LAT_GRID_SIZE_DEG;
+    const npcLng = (targetGridX + 0.50) * LNG_GRID_SIZE_DEG;
+
+    const npcContainer = document.createElement('div');
+    npcContainer.className = 'npc-marker-container';
+
+    const npcImg = document.createElement('img');
+    npcImg.className = 'npc-marker-icon';
+    npcImg.src = 'npc.png'; // Points directly to custom npc.png asset
+    npcImg.onerror = function() {
+      this.onerror = null;
+      this.src = NPC_SVG_FALLBACK;
+    };
+    npcContainer.appendChild(npcImg);
+
+    const marker = new maplibregl.Marker({
+      element: npcContainer,
+      anchor: 'center'
+    }).setLngLat([npcLng, npcLat]).addTo(map);
+
+    npcNode = {
+      lat: npcLat,
+      lng: npcLng,
+      marker: marker
+    };
+
+    npcContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+      renderNPCCard();
+    });
+  }
+
+  function renderNPCCard() {
+    if (!npcNode || !userLat || !userLng) return;
+
+    const dist = getDistanceMeters(userLat, userLng, npcNode.lat, npcNode.lng);
+    const distRounded = dist.toFixed(0);
+    const inRange = dist <= NPC_TALK_RADIUS_METERS;
+    const hasAxe = playerInventory.has('axe');
+    const container = document.getElementById('plot-info');
+
+    if (!inRange) {
+      container.innerHTML = `
+        <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
+        <b>Distance:</b> ${distRounded}m away<br/>
+        <small style="color:#ef4444;">Walk within 20m to trade with him!</small>
+      `;
+      return;
+    }
+
+    if (hasAxe) {
+      container.innerHTML = `
+        <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
+        <i>"Good luck out there with that axe, adventurer!"</i><br/>
+        <small style="color:#a855f7;">✨ You already own the Lumberjack Axe.</small>
+      `;
+      return;
+    }
+
+    const canAfford = playerGold >= AXE_PRICE;
+    const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
+    const disabledAttr = canAfford ? '' : 'disabled';
+
+    container.innerHTML = `
+      <b>🧔‍♂️ Barnaby the Merchant:</b><br/>
+      <i>"Need something for chopping wood?"</i><br/>
+      <b>Item:</b> 🪓 Lumberjack Axe<br/>
+      <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
+      <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
+    `;
+
+    if (canAfford) {
+      document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
+    }
+  }
+
+  function buyAxe() {
+    if (playerGold >= AXE_PRICE && !playerInventory.has('axe')) {
+      playerGold -= AXE_PRICE;
+      playerInventory.add('axe');
+
+      localStorage.setItem('rpg_player_gold', playerGold);
+      localStorage.setItem('rpg_player_inventory', JSON.stringify(Array.from(playerInventory)));
+
+      updateGoldDisplay();
+      updateInventoryDisplay();
+      renderNPCCard();
+      document.getElementById('status').innerText = '🪓 Acquired Lumberjack Axe!';
+    }
   }
 
   function cleanupDistantCoins() {
@@ -320,7 +454,6 @@
   
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
   
-      // Updated position calculation using global constant
       const pos = POSITIONS[slotIndex];
       const goldLat = (targetGridY + pos.y) * LAT_GRID_SIZE_DEG;
       const goldLng = (targetGridX + pos.x) * LNG_GRID_SIZE_DEG;
@@ -391,10 +524,8 @@
 
       if (dist <= PICKUP_RADIUS_METERS) {
         playerGold += node.value;
-		
-        // 💾 Save updated gold amount
+        
         localStorage.setItem('rpg_player_gold', playerGold);
-		
         updateGoldDisplay();
         
         const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
@@ -411,7 +542,6 @@
     const minLat = gridY * LAT_GRID_SIZE_DEG;
     const maxLat = (gridY + 1) * LAT_GRID_SIZE_DEG;
     
-    // Straight, continuous vertical lines across all rows!
     const minLng = gridX * LNG_GRID_SIZE_DEG;
     const maxLng = (gridX + 1) * LNG_GRID_SIZE_DEG;
   
@@ -458,10 +588,17 @@
     document.getElementById('gold-amount').innerText = playerGold;
   }
 
+  function updateInventoryDisplay() {
+    const items = [];
+    if (playerInventory.has('axe')) items.push('🪓 Axe');
+    
+    document.getElementById('inventory-list').innerText = items.length > 0 ? items.join(', ') : 'Empty';
+  }
+
   function renderSelectedPlotCard() {
     const container = document.getElementById('plot-info');
     if (!selectedPlotId) {
-      container.innerHTML = `<i>Tap any square or coin to inspect.</i>`;
+      container.innerHTML = `<i>Tap any square, coin, or NPC to inspect.</i>`;
       return;
     }
 
@@ -494,7 +631,6 @@
       playerGold -= PLOT_PRICE;
       claimedPlotIds.add(selectedPlotId);
       
-      // 💾 Save state
       localStorage.setItem('rpg_player_gold', playerGold);
       localStorage.setItem('rpg_claimed_plots', JSON.stringify(Array.from(claimedPlotIds)));
   
@@ -515,22 +651,20 @@
     }
   }
 
-  // =========================================================
-  // IMMEDIATE UI & GEOLOCATION EVENT LISTENERS (Top-Level)
-  // =========================================================
-  
+  // UI & GEOLOCATION EVENT LISTENERS
   document.getElementById('dev-reset-btn').addEventListener('click', () => {
-    if (confirm("Reset all gold to 100 and wipe owned plots?")) {
+    if (confirm("Reset all gold, inventory, and wipe owned plots?")) {
       localStorage.removeItem('rpg_player_gold');
       localStorage.removeItem('rpg_claimed_plots');
+      localStorage.removeItem('rpg_player_inventory');
       
-      // Reset runtime memory
       playerGold = 100;
       claimedPlotIds.clear();
+      playerInventory.clear();
       selectedPlotId = null;
   
-      // Refresh UI & Map
       updateGoldDisplay();
+      updateInventoryDisplay();
       renderSelectedPlotCard();
       refreshMapGrid();
       
@@ -554,8 +688,7 @@
   geolocate.on('geolocate', (e) => {
     userLat = e.coords.latitude;
     userLng = e.coords.longitude;
-	
-    // Locks longitude scaling ONCE to user's location
+    
     initGridScaling(userLat);
 
     requestWakeLock();
@@ -565,12 +698,14 @@
       gameStarted = true;
       document.getElementById('start-overlay').style.display = 'none';
       document.getElementById('ui-panel').style.display = 'block';
-	  
-	  updateGoldDisplay();
+      
+      updateGoldDisplay();
+      updateInventoryDisplay();
 
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
       refreshMapGrid();
       initCoinSpawns();
+      spawnNPC();
 
       map.jumpTo({ center: [userLng, userLat], zoom: 18 });
     } else {
@@ -598,10 +733,7 @@
     }
   });
 
-  // =========================================================
   // MAP INITIALIZATION & LAYER SETUP
-  // =========================================================
-
   map.on('load', () => {
     try {
       const style = map.getStyle();
