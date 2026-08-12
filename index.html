@@ -38,7 +38,7 @@
       position: absolute; 
       top: 12px; 
       left: 12px; 
-      z-index: 10;
+      z-index: 1000;
       width: 300px;
       max-width: calc(100vw - 24px);
       box-sizing: border-box;
@@ -51,6 +51,54 @@
       font-size: 15px;
       display: none; /* Hidden until game starts */
     }
+
+    /* Close Button (inside #ui-panel) */
+    #close-ui-btn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+    
+    #close-ui-btn:hover {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+    }
+    
+    /* Floating Show Button (when panel is collapsed) */
+    #toggle-ui-btn {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 999;
+      width: 300px;
+      max-width: calc(100vw - 24px);
+      display: none; /* Hidden until game starts */
+      background: rgba(13, 17, 23, 0.92);
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    
+    #toggle-ui-btn:hover {
+      background: #21262d;
+      border-color: #8b949e;
+    }	
+	
     #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; }
     #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 2px; }
     #inventory-display { font-size: 13px; color: #a855f7; margin-bottom: 6px; font-weight: 500; }
@@ -185,8 +233,14 @@
   <div id="start-status"></div>
 </div>
 
+<!-- Floating Show Button (Always available when panel is hidden) -->
+<button id="toggle-ui-btn" class="btn">⚙️ Menu</button>
+
 <!-- Main Game UI Panel -->
 <div id="ui-panel">
+  <!-- Close Button -->
+  <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
+
   <h3>⚔️ GPS Land Claimer</h3>
   <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
   <div id="inventory-display">🎒 Inventory: <span id="inventory-list">Empty</span></div>
@@ -849,6 +903,17 @@
       map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
     }
   });
+  
+  // Toggle Panel Visibility Listeners
+  document.getElementById('close-ui-btn').addEventListener('click', () => {
+    document.getElementById('ui-panel').style.display = 'none';
+    document.getElementById('toggle-ui-btn').style.display = 'block';
+  });
+  
+  document.getElementById('toggle-ui-btn').addEventListener('click', () => {
+    document.getElementById('ui-panel').style.display = 'block';
+    document.getElementById('toggle-ui-btn').style.display = 'none';
+  });
 
   geolocate.on('geolocate', (e) => {
     userLat = e.coords.latitude;
@@ -863,16 +928,16 @@
       gameStarted = true;
       document.getElementById('start-overlay').style.display = 'none';
       
-      const uiPanel = document.getElementById('ui-panel');
-      uiPanel.style.display = 'block';
-      uiPanel.style.zIndex = '1000'; // <-- Ensures UI sits above the player (100)
-      
+      // Show the main UI panel on launch and ensure the toggle button is ready
+      document.getElementById('ui-panel').style.display = 'block';
+      document.getElementById('toggle-ui-btn').style.display = 'none';
+    
       updateGoldDisplay();
       updateInventoryDisplay();
     
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
       refreshMapGrid();
-      spawnTrees(); // Spawn decorative trees for the local grid
+      spawnTrees();
       initCoinSpawns();
       spawnNPC();
       initNPCMovement();
