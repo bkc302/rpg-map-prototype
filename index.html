@@ -157,6 +157,11 @@
   <div id="plot-card">
     <div id="plot-info"><i>Tap any square or coin to inspect.</i></div>
   </div>
+
+  <!-- 🛠️ Dev Reset Button -->
+  <button id="dev-reset-btn" style="margin-top: 12px; width: 100%; padding: 6px; background: #991b1b; color: #fecaca; border: 1px solid #dc2626; border-radius: 6px; font-size: 11px; cursor: pointer;">
+    ⚠️ Dev: Reset Gold & Land
+  </button>
 </div>
 
 <div id="map"></div>
@@ -168,9 +173,11 @@
   let autoCenterEnabled = true;
 
   // Game Economy & Land Ownership State
-  let playerGold = 100;
+  const savedGold = localStorage.getItem('rpg_player_gold');
+  let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 100;
   const PLOT_PRICE = 100;
-  const claimedPlotIds = new Set();
+  const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
+  const claimedPlotIds = new Set(savedPlots);
   let selectedPlotId = null;
 
   // Gold Spawning & Gathering System
@@ -384,6 +391,10 @@
 
       if (dist <= PICKUP_RADIUS_METERS) {
         playerGold += node.value;
+		
+        // 💾 Save updated gold amount
+        localStorage.setItem('rpg_player_gold', playerGold);
+		
         updateGoldDisplay();
         
         const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
@@ -482,6 +493,11 @@
     if (playerGold >= PLOT_PRICE) {
       playerGold -= PLOT_PRICE;
       claimedPlotIds.add(selectedPlotId);
+      
+      // 💾 Save state
+      localStorage.setItem('rpg_player_gold', playerGold);
+      localStorage.setItem('rpg_claimed_plots', JSON.stringify(Array.from(claimedPlotIds)));
+  
       updateGoldDisplay();
       renderSelectedPlotCard();
       refreshMapGrid();
@@ -502,6 +518,25 @@
   // =========================================================
   // IMMEDIATE UI & GEOLOCATION EVENT LISTENERS (Top-Level)
   // =========================================================
+  
+  document.getElementById('dev-reset-btn').addEventListener('click', () => {
+    if (confirm("Reset all gold to 100 and wipe owned plots?")) {
+      localStorage.removeItem('rpg_player_gold');
+      localStorage.removeItem('rpg_claimed_plots');
+      
+      // Reset runtime memory
+      playerGold = 100;
+      claimedPlotIds.clear();
+      selectedPlotId = null;
+  
+      // Refresh UI & Map
+      updateGoldDisplay();
+      renderSelectedPlotCard();
+      refreshMapGrid();
+      
+      alert("Save data cleared!");
+    }
+  });
 
   document.getElementById('start-btn').addEventListener('click', () => {
     document.getElementById('start-status').innerText = '⌛ Acquiring GPS fix...';
@@ -530,6 +565,8 @@
       gameStarted = true;
       document.getElementById('start-overlay').style.display = 'none';
       document.getElementById('ui-panel').style.display = 'block';
+	  
+	  updateGoldDisplay();
 
       playerMarker.setLngLat([userLng, userLat]).addTo(map);
       refreshMapGrid();
