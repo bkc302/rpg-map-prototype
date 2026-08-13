@@ -143,6 +143,61 @@
     }
     .claimed { background-color: #2563eb; color: #fff; }
     .wild { background-color: #10b981; color: #fff; }
+	
+    /* Bottom-Left Compass Widget */
+    .compass-btn {
+      position: fixed;
+      bottom: 24px;
+      left: 16px;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.85);
+      border: 2px solid #334155;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 0;
+      outline: none;
+      transition: border-color 0.2s, transform 0.1s;
+    }
+    
+    .compass-btn:active {
+      transform: scale(0.92);
+    }
+    
+    .compass-btn.active {
+      border-color: #38bdf8; /* Highlighted blue when active tracking is ON */
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
+    
+    .compass-dial {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .compass-n {
+      position: absolute;
+      top: 3px;
+      font-size: 10px;
+      font-weight: 800;
+      color: #ef4444;
+      font-family: monospace;
+      pointer-events: none;
+    }
+    
+    .compass-needle {
+      transition: transform 0.15s ease-out;
+      transform-origin: center center;
+    }
 
     /* Outer Marker Containers (Positioned by MapLibre) */
     .player-marker-container {
@@ -271,6 +326,21 @@
 </div>
 
 <div id="map"></div>
+
+<!-- Floating Compass (Bottom-Left) -->
+<button id="compass-btn" class="compass-btn" title="Reset North / Toggle Compass">
+  <div id="compass-dial" class="compass-dial">
+    <span class="compass-n">N</span>
+    <svg id="compass-needle" class="compass-needle" viewBox="0 0 24 24" width="28" height="28">
+      <!-- North Pointer (Red) -->
+      <polygon points="12,2 16,12 12,10" fill="#ef4444" />
+      <polygon points="12,2 8,12 12,10" fill="#f87171" />
+      <!-- South Pointer (Silver) -->
+      <polygon points="12,22 16,12 12,14" fill="#94a3b8" />
+      <polygon points="12,22 8,12 12,14" fill="#cbd5e1" />
+    </svg>
+  </div>
+</button>
 
 <script>
   let userLat = null;
@@ -1208,6 +1278,69 @@
         refreshMapGrid();
       }
     });
+
+    // --- COMPASS & ORIENTATION LOGIC ---
+    let compassActive = false;
+    const compassBtn = document.getElementById('compass-btn');
+    const compassNeedle = document.getElementById('compass-needle');
+
+    function updateCompassUI() {
+      if (!compassNeedle) return;
+      const bearing = map.getBearing();
+      compassNeedle.style.transform = `rotate(${-bearing}deg)`;
+    }
+
+    // Keep needle facing true North when dragging/spinning the map
+    map.on('rotate', updateCompassUI);
+
+    function handleDeviceOrientation(event) {
+      if (!compassActive) return;
+
+      let heading = null;
+      if (event.webkitCompassHeading) {
+        heading = event.webkitCompassHeading; // iOS
+      } else if (event.alpha !== null) {
+        heading = 360 - event.alpha; // Android / Standard
+      }
+
+      if (heading !== null) {
+        map.rotateTo(heading, { duration: 100 });
+      }
+    }
+
+    if (compassBtn) {
+      compassBtn.addEventListener('click', async () => {
+        compassActive = !compassActive;
+
+        if (compassActive) {
+          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+              const response = await DeviceOrientationEvent.requestPermission();
+              if (response !== 'granted') {
+                compassActive = false;
+                alert('Device orientation permission denied.');
+                return;
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }
+
+          compassBtn.classList.add('active');
+          window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+        } else {
+          compassBtn.classList.remove('active');
+          window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
+
+          map.easeTo({
+            bearing: 0,
+            pitch: 0,
+            duration: 500
+          });
+        }
+      });
+    }
+    // ------------------------------------
 
     if (userLat && userLng) {
       refreshMapGrid();
