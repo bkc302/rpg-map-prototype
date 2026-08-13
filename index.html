@@ -176,10 +176,11 @@
 
     /* 96x96 Tree Marker Container */
     .tree-marker-container {
-	  z-index: 10;
+      z-index: 10;
       width: 96px;
       height: 96px;
-      pointer-events: none; /* Decorative only */
+      pointer-events: auto !important; /* NOW CLICKABLE! */
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -221,6 +222,7 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.4));
+      pointer-events: none; /* Icon passes hits to container */
     }
 
     @keyframes bounce {
@@ -471,8 +473,15 @@
   
           activeTreeNodes.push(treeNode);
 
-          treeContainer.addEventListener('click', (e) => {
-            e.stopPropagation();
+          // Stop map click/touch events from selecting the grid tile underneath
+          ['click', 'touchstart', 'mousedown'].forEach(eventType => {
+            treeContainer.addEventListener(eventType, (e) => {
+              e.stopPropagation();
+            });
+          });
+
+          // Open the Pine Tree card
+          treeContainer.addEventListener('click', () => {
             renderTreeCard(treeNode);
           });
         }
