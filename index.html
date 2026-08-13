@@ -33,6 +33,13 @@
     #start-overlay h1 { font-size: 26px; margin-bottom: 8px; color: #facc15; }
     #start-overlay p { font-size: 15px; color: #94a3b8; max-width: 320px; margin-bottom: 20px; line-height: 1.4; }
     #start-status { font-size: 14px; color: #38bdf8; margin-top: 12px; min-height: 20px; }
+	
+	#start-btn {
+	width: auto;
+	max-width: 280px;
+	padding: 12px 24px;
+	box-sizing: border-box;
+	}
 
     #ui-panel {
       position: absolute; 
@@ -80,7 +87,7 @@
       top: 12px;
       left: 12px;
       z-index: 999;
-      width: 300px;
+      width: 100px;
       max-width: calc(100vw - 24px);
       display: none; /* Hidden until game starts */
       background: rgba(13, 17, 23, 0.92);
@@ -281,7 +288,7 @@
 
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
-  const MAX_GOLD_NODES = 20;
+  const MAX_GOLD_NODES = 25;
   const PICKUP_RADIUS_FEET = 60;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
   
@@ -386,70 +393,72 @@
     activeTreeNodes = [];
   }
 
-  // Spawns up to 30 trees (max 1 per tile) in the 9x9 active grid
+  // Simple deterministic pseudo-random generator based on tile grid coordinates
+  function getTileRandom(gridX, gridY) {
+    // Hash two integer grid coordinates into a fixed float between 0.0 and 1.0
+    let hash = Math.sin(gridX * 12.9898 + gridY * 78.233) * 43758.5453123;
+    return hash - Math.floor(hash);
+  }
+  
+  // Spawns trees deterministically across the 9x9 grid so they remain in fixed world locations
   function spawnTrees() {
     if (!userLat || !userLng) return;
-
+  
     const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
     const newCenterKey = `${centerGridY}_${centerGridX}`;
-
-    // Avoid rebuilding trees if player hasn't moved to a new grid tile center
+  
+    // Don't recalculate if player hasn't crossed into a new grid tile center
     if (currentGridCenterKey === newCenterKey) {
       updateTreeVisibility();
       return;
     }
-
+  
     currentGridCenterKey = newCenterKey;
-    clearTrees();
-
-    const gridRadius = 4;
-    const availableTiles = [];
-
-    // Collect all 81 tiles in the 9x9 grid
+    clearTrees(); // Safely clear markers from previous render
+  
+    const gridRadius = 4; // Covers the 9x9 grid around player (-4 to +4)
+    
+    // Set tree density (e.g., 0.20 means roughly ~20% of world tiles contain a tree)
+    const TREE_DENSITY_THRESHOLD = 0.20; 
+  
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
-        availableTiles.push({ gridX: centerGridX + x, gridY: centerGridY + y });
+        const tileGridX = centerGridX + x;
+        const tileGridY = centerGridY + y;
+  
+        // Check deterministic pseudo-random value for this unique tile coordinate
+        const tileSeed = getTileRandom(tileGridX, tileGridY);
+  
+        if (tileSeed < TREE_DENSITY_THRESHOLD) {
+          const treeLat = (tileGridY + 0.50) * LAT_GRID_SIZE_DEG;
+          const treeLng = (tileGridX + 0.50) * LNG_GRID_SIZE_DEG;
+  
+          const treeContainer = document.createElement('div');
+          treeContainer.className = 'tree-marker-container';
+          treeContainer.style.zIndex = '10';
+  
+          const treeImg = document.createElement('img');
+          treeImg.className = 'tree-marker-icon';
+          treeImg.src = 'tree.png';
+          treeImg.onerror = function() {
+            this.onerror = null;
+            this.src = TREE_SVG_FALLBACK;
+          };
+          treeContainer.appendChild(treeImg);
+  
+          const marker = new maplibregl.Marker({
+            element: treeContainer,
+            anchor: 'center'
+          }).setLngLat([treeLng, treeLat]).addTo(map);
+  
+          activeTreeNodes.push({
+            marker: marker,
+            element: treeContainer
+          });
+        }
       }
     }
-
-    // Shuffle available tiles
-    for (let i = availableTiles.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [availableTiles[i], availableTiles[j]] = [availableTiles[j], availableTiles[i]];
-    }
-
-    // Pick max 30 tiles (1 tree per selected tile)
-    const treeCount = Math.min(15, availableTiles.length);
-    const selectedTiles = availableTiles.slice(0, treeCount);
-
-    selectedTiles.forEach(tile => {
-      // Place tree directly at the tile center
-      const treeLat = (tile.gridY + 0.50) * LAT_GRID_SIZE_DEG;
-      const treeLng = (tile.gridX + 0.50) * LNG_GRID_SIZE_DEG;
-
-      const treeContainer = document.createElement('div');
-      treeContainer.className = 'tree-marker-container';
-
-      const treeImg = document.createElement('img');
-      treeImg.className = 'tree-marker-icon';
-      treeImg.src = 'tree.png';
-      treeImg.onerror = function() {
-        this.onerror = null;
-        this.src = TREE_SVG_FALLBACK;
-      };
-      treeContainer.appendChild(treeImg);
-
-      const marker = new maplibregl.Marker({
-        element: treeContainer,
-        anchor: 'center'
-      }).setLngLat([treeLng, treeLat]).addTo(map);
-
-      activeTreeNodes.push({
-        marker: marker,
-        element: treeContainer
-      });
-    });
-
+  
     updateTreeVisibility();
   }
 
