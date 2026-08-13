@@ -146,6 +146,7 @@
 
     /* Outer Marker Containers (Positioned by MapLibre) */
     .player-marker-container {
+	  z-index: 100;
       width: 48px;
       height: 48px;
       display: flex;
@@ -154,6 +155,7 @@
     }
 
     .gold-marker-container {
+	  z-index: 150;
       width: 32px;
       height: 32px;
       cursor: pointer;
@@ -163,6 +165,7 @@
     }
 
     .npc-marker-container {
+	  z-index: 80;
       width: 48px;
       height: 48px;
       cursor: pointer;
@@ -173,6 +176,7 @@
 
     /* 96x96 Tree Marker Container */
     .tree-marker-container {
+	  z-index: 10;
       width: 96px;
       height: 96px;
       pointer-events: none; /* Decorative only */
@@ -288,23 +292,20 @@
 
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
-  const MAX_GOLD_NODES = 25;
-  const PICKUP_RADIUS_FEET = 60;
+  const MAX_GOLD_NODES = 30;
+  const PICKUP_RADIUS_FEET = 80;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
   
   // NPC Merchant State
   let npcNode = null;
   const NPC_TALK_RADIUS_FEET = 100;
+  
+  // Gold pickup sound effect
+  const coinAudio = new Audio('coin.mp3');
 
   // Tree Decoration System
   let activeTreeNodes = [];
   let currentGridCenterKey = null; // Tracks player grid center to avoid unnecessary tree respawns
-
-  // SVG Fallback Data URIs
-  const PLAYER_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%232563eb' stroke='%231d4ed8' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fef08a'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%231d4ed8'/%3E%3C/svg%3E";
-  const GOLD_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23facc15' stroke='%23b45309' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3Ctext x='16' y='21' font-size='13' font-weight='bold' text-anchor='middle' fill='%23854d0e' font-family='sans-serif'%3E$%3C/text%3E%3C/svg%3E";
-  const NPC_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='%237c3aed' stroke='%235b21b6' stroke-width='3'/%3E%3Ccircle cx='24' cy='18' r='8' fill='%23fde047'/%3E%3Cpath d='M12 38 C12 30 36 30 36 38' stroke='%23ffffff' stroke-width='3' fill='%235b21b6'/%3E%3C/svg%3E";
-  const TREE_SVG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect x='42' y='60' width='12' height='28' fill='%2378350f' rx='2'/%3E%3Cpolygon points='48,8 18,50 78,50' fill='%2315803d'/%3E%3Cpolygon points='48,22 24,62 72,62' fill='%2316a34a'/%3E%3C/svg%3E";
 
   let wakeLock = null;
   async function requestWakeLock() {
@@ -338,16 +339,10 @@
   // Player Marker Construction using <img> with onerror fallback
   const playerContainer = document.createElement('div');
   playerContainer.className = 'player-marker-container';
-  
-  playerContainer.style.zIndex = '100';
 
   const playerImg = document.createElement('img');
   playerImg.className = 'player-marker-icon';
   playerImg.src = 'player.png';
-  playerImg.onerror = function() {
-    this.onerror = null;
-    this.src = PLAYER_SVG_FALLBACK;
-  };
   playerContainer.appendChild(playerImg);
 
   const playerMarker = new maplibregl.Marker({
@@ -435,15 +430,10 @@
   
           const treeContainer = document.createElement('div');
           treeContainer.className = 'tree-marker-container';
-          treeContainer.style.zIndex = '10';
   
           const treeImg = document.createElement('img');
           treeImg.className = 'tree-marker-icon';
           treeImg.src = 'tree.png';
-          treeImg.onerror = function() {
-            this.onerror = null;
-            this.src = TREE_SVG_FALLBACK;
-          };
           treeContainer.appendChild(treeImg);
   
           const marker = new maplibregl.Marker({
@@ -501,10 +491,6 @@
     const npcImg = document.createElement('img');
     npcImg.className = 'npc-marker-icon';
     npcImg.src = 'npc.png';
-    npcImg.onerror = function() {
-      this.onerror = null;
-      this.src = NPC_SVG_FALLBACK;
-    };
     npcContainer.appendChild(npcImg);
 
     const marker = new maplibregl.Marker({
@@ -695,10 +681,6 @@
       const goldImg = document.createElement('img');
       goldImg.className = 'gold-marker-icon';
       goldImg.src = 'gold.png';
-      goldImg.onerror = function() {
-        this.onerror = null;
-        this.src = GOLD_SVG_FALLBACK;
-      };
       goldContainer.appendChild(goldImg);
   
       const nodeId = `coin_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -729,7 +711,7 @@
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
           <b>Distance:</b> ${dist} ft away<br/>
-          <small style="color:#94a3b8;">Walk within 60 ft to pick up!</small>
+          <small style="color:#94a3b8;">Walk within 80 ft to pick up!</small>
         `;
       });
   
@@ -738,7 +720,7 @@
   }
 
   function initCoinSpawns() {
-    const initialCount = Math.floor(Math.random() * 3) + 4;
+    const initialCount = Math.floor(Math.random() * 5) + 8; // Spawns 8, 9, 10, 11, or 12
     for (let i = 0; i < initialCount; i++) {
       spawnSingleCoin();
     }
@@ -748,20 +730,67 @@
   function checkCoinProximity() {
     for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
       const node = activeGoldNodes[i];
+  
+      // Skip coins currently in the middle of being pulled
+      if (node.isCollecting) continue;
+  
       const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
   
       if (dist <= PICKUP_RADIUS_FEET) {
-        playerGold += node.value;
-        
-        localStorage.setItem('rpg_player_gold', playerGold);
-        updateGoldDisplay();
-        
-        const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
-        document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
-        
-        node.marker.remove();
-        activeGoldNodes.splice(i, 1);
-        renderSelectedPlotCard();
+        node.isCollecting = true; // Mark as collecting so it doesn't trigger twice
+  
+        // 1. Play Sound Effect (cloned so rapid pickups don't cut each other off)
+        const sound = coinAudio.cloneNode();
+        sound.volume = 0.6; // Adjust volume (0.0 to 1.0)
+        sound.play().catch(() => {}); // .catch prevents browser autoplay warnings
+  
+        // 2. Animate coin sliding towards player ("Magnet Pull")
+        const startLng = node.lng;
+        const startLat = node.lat;
+        const startTime = performance.now();
+        const duration = 350; // Animation duration in milliseconds
+  
+        function pullAnimation(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          
+          // Acceleration curve (ease-in) for a snappy magnetic feel
+          const ease = progress * progress;
+  
+          // Slide toward player's current location
+          const currentLng = startLng + (userLng - startLng) * ease;
+          const currentLat = startLat + (userLat - startLat) * ease;
+  
+          node.marker.setLngLat([currentLng, currentLat]);
+  
+          // Fade out as it gets closer
+          if (node.element) {
+            node.element.style.opacity = (1 - ease).toString();
+          }
+  
+          if (progress < 1) {
+            requestAnimationFrame(pullAnimation);
+          } else {
+            // 3. Finalize Pickup when coin arrives at player
+            playerGold += node.value;
+            localStorage.setItem('rpg_player_gold', playerGold);
+            updateGoldDisplay();
+  
+            const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
+            document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
+  
+            node.marker.remove();
+  
+            // Safely remove from active array
+            const currentIndex = activeGoldNodes.indexOf(node);
+            if (currentIndex !== -1) {
+              activeGoldNodes.splice(currentIndex, 1);
+            }
+            renderSelectedPlotCard();
+          }
+        }
+  
+        requestAnimationFrame(pullAnimation);
       }
     }
   }
