@@ -279,14 +279,23 @@
   // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
   let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 100;
+  
+  const savedWood = localStorage.getItem('rpg_player_wood');
+  let playerWood = (savedWood !== null) ? parseInt(savedWood, 10) : 0;
+  
   const PLOT_PRICE = 100;
   const AXE_PRICE = 20;
+  const TREE_CUT_RADIUS_FEET = 80;
+  const TREE_RESPAWN_MS = 15 * 60 * 1000; // 15 Minutes
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
   const claimedPlotIds = new Set(savedPlots);
   
   const savedInventory = JSON.parse(localStorage.getItem('rpg_player_inventory') || '[]');
   const playerInventory = new Set(savedInventory);
+  
+  // Tracks chopped trees: { "gridY_gridX": timestamp_when_chopped }
+  let choppedTrees = JSON.parse(localStorage.getItem('rpg_chopped_trees') || '{}');
 
   let selectedPlotId = null;
 
@@ -395,33 +404,43 @@
     return hash - Math.floor(hash);
   }
   
-  // Spawns trees deterministically across the 9x9 grid so they remain in fixed world locations
+
+  // Spawns trees deterministically across the 9x9 grid, respecting chopped respawn timers
   function spawnTrees() {
     if (!userLat || !userLng) return;
   
     const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
     const newCenterKey = `${centerGridY}_${centerGridX}`;
   
-    // Don't recalculate if player hasn't crossed into a new grid tile center
     if (currentGridCenterKey === newCenterKey) {
       updateTreeVisibility();
       return;
     }
   
     currentGridCenterKey = newCenterKey;
-    clearTrees(); // Safely clear markers from previous render
+    clearTrees();
   
-    const gridRadius = 4; // Covers the 9x9 grid around player (-4 to +4)
-    
-    // Set tree density (e.g., 0.20 means roughly ~20% of world tiles contain a tree)
+    const gridRadius = 4;
     const TREE_DENSITY_THRESHOLD = 0.20; 
+    const isVisible = map.getZoom() >= 17.5;
+    const now = Date.now();
   
     for (let x = -gridRadius; x <= gridRadius; x++) {
       for (let y = -gridRadius; y <= gridRadius; y++) {
         const tileGridX = centerGridX + x;
         const tileGridY = centerGridY + y;
-  
-        // Check deterministic pseudo-random value for this unique tile coordinate
+        const tileKey = `${tileGridY}_${tileGridX}`;
+
+        // Skip tree if it was chopped down less than 15 minutes ago
+        if (choppedTrees[tileKey]) {
+          if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
+            continue; // Tree is still regrowing
+          } else {
+            delete choppedTrees[tileKey]; // Respawn time elapsed, remove record
+            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+          }
+        }
+
         const tileSeed = getTileRandom(tileGridX, tileGridY);
   
         if (tileSeed < TREE_DENSITY_THRESHOLD) {
@@ -430,6 +449,7 @@
   
           const treeContainer = document.createElement('div');
           treeContainer.className = 'tree-marker-container';
+          treeContainer.style.display = isVisible ? 'flex' : 'none';
   
           const treeImg = document.createElement('img');
           treeImg.className = 'tree-marker-icon';
@@ -440,16 +460,90 @@
             element: treeContainer,
             anchor: 'center'
           }).setLngLat([treeLng, treeLat]).addTo(map);
-  
-          activeTreeNodes.push({
+
+          const treeNode = {
+            tileKey: tileKey,
+            lat: treeLat,
+            lng: treeLng,
             marker: marker,
             element: treeContainer
+          };
+  
+          activeTreeNodes.push(treeNode);
+
+          treeContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+            renderTreeCard(treeNode);
           });
         }
       }
     }
+  }
   
-    updateTreeVisibility();
+  function renderTreeCard(treeNode) {
+    if (!userLat || !userLng) return;
+
+    const dist = getDistanceFeet(userLat, userLng, treeNode.lat, treeNode.lng).toFixed(0);
+    const inRange = dist <= TREE_CUT_RADIUS_FEET;
+    const hasAxe = playerInventory.has('axe');
+    const container = document.getElementById('plot-info');
+
+    if (!hasAxe) {
+      container.innerHTML = `
+        <b>🌲 Pine Tree:</b><br/>
+        <b>Distance:</b> ${dist} ft away<br/>
+        <small style="color:#ef4444;">⚠️ You need a Lumberjack Axe to chop this tree!</small>
+      `;
+      return;
+    }
+
+    if (!inRange) {
+      container.innerHTML = `
+        <b>🌲 Pine Tree:</b><br/>
+        <b>Distance:</b> ${dist} ft away<br/>
+        <small style="color:#ef4444;">Walk within 80 ft to chop down!</small>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <b>🌲 Pine Tree:</b><br/>
+      <b>Distance:</b> ${dist} ft away (In Range)<br/>
+      <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
+    `;
+
+    document.getElementById('chop-tree-btn').addEventListener('click', () => chopTree(treeNode));
+  }
+
+  function chopTree(treeNode) {
+    if (!playerInventory.has('axe')) return;
+
+    // Weighted wood yield (1 common -> 5 rare)
+    // 1 (40%), 2 (30%), 3 (15%), 4 (10%), 5 (5%)
+    const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
+    const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
+
+    playerWood += woodYield;
+    localStorage.setItem('rpg_player_wood', playerWood);
+    updateInventoryDisplay();
+
+    // Mark tree as chopped with current timestamp
+    choppedTrees[treeNode.tileKey] = Date.now();
+    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+
+    // Remove tree from map
+    treeNode.marker.remove();
+    const index = activeTreeNodes.indexOf(treeNode);
+    if (index !== -1) activeTreeNodes.splice(index, 1);
+
+    const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
+    document.getElementById('status').innerText = yieldText;
+
+    document.getElementById('plot-info').innerHTML = `
+      <b>🌲 Pine Tree:</b><br/>
+      <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
+      <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
+    `;
   }
 
   // Toggles tree visibility so they are only displayed at zoom level >= 18
@@ -764,8 +858,9 @@
           node.marker.setLngLat([currentLng, currentLat]);
   
           // Fade out as it gets closer
-          if (node.element) {
-            node.element.style.opacity = (1 - ease).toString();
+          const markerElem = node.marker.getElement();
+          if (markerElem) {
+            markerElem.style.opacity = (1 - ease).toString();
           }
   
           if (progress < 1) {
@@ -848,6 +943,7 @@
   function updateInventoryDisplay() {
     const items = [];
     if (playerInventory.has('axe')) items.push('🪓 Axe');
+    if (playerWood > 0) items.push(`🪵 Wood x${playerWood}`);
     
     document.getElementById('inventory-list').innerText = items.length > 0 ? items.join(', ') : 'Empty';
   }
@@ -909,21 +1005,29 @@
   }
 
   // UI & GEOLOCATION EVENT LISTENERS
-  document.getElementById('dev-reset-btn').addEventListener('click', () => {
-    if (confirm("Reset all gold, inventory, and wipe owned plots?")) {
+   document.getElementById('dev-reset-btn').addEventListener('click', () => {
+    if (confirm("Reset all gold, inventory, wood, and wipe owned plots?")) {
       localStorage.removeItem('rpg_player_gold');
+      localStorage.removeItem('rpg_player_wood');
       localStorage.removeItem('rpg_claimed_plots');
       localStorage.removeItem('rpg_player_inventory');
+      localStorage.removeItem('rpg_chopped_trees');
       
       playerGold = 100;
+      playerWood = 0;
       claimedPlotIds.clear();
       playerInventory.clear();
+      choppedTrees = {};
       selectedPlotId = null;
   
       updateGoldDisplay();
       updateInventoryDisplay();
       renderSelectedPlotCard();
       refreshMapGrid();
+      
+      // Force tree refresh
+      currentGridCenterKey = null;
+      spawnTrees();
       
       alert("Save data cleared!");
     }
