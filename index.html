@@ -160,7 +160,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 999;
       padding: 0;
       outline: none;
       transition: border-color 0.2s, transform 0.1s;
@@ -380,7 +380,7 @@
   
   // NPC Merchant State
   let npcNode = null;
-  const NPC_TALK_RADIUS_FEET = 100;
+  const NPC_TALK_RADIUS_FEET = 80;
   
   // Gold pickup sound effect
   const coinAudio = new Audio('coin.mp3');
@@ -749,7 +749,7 @@
       container.innerHTML = `
         <b>Timber Pete:</b><br/>
         <b>Distance:</b> ${distRounded} ft away<br/>
-        <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
+        <small style="color:#ef4444;">Walk within 80 ft to trade with him!</small>
       `;
       return;
     }
@@ -1138,68 +1138,65 @@
   });
 
   geolocate.on('geolocate', (e) => {
-    userLat = e.coords.latitude;
-    userLng = e.coords.longitude;
-    const heading = e.coords.heading; // 1. Grab GPS movement heading from position data
-    
-    initGridScaling(userLat);
-  
-    requestWakeLock();
-    cleanupDistantCoins();
-  
-    if (!gameStarted) {
-      gameStarted = true;
-      document.getElementById('start-overlay').style.display = 'none';
+      userLat = e.coords.latitude;
+      userLng = e.coords.longitude;
+      const heading = e.coords.heading; // GPS movement heading (valid while walking)
       
-      // Show the main UI panel on launch and ensure the toggle button is ready
-      document.getElementById('ui-panel').style.display = 'block';
-      document.getElementById('toggle-ui-btn').style.display = 'none';
-    
-      updateGoldDisplay();
-      updateInventoryDisplay();
-    
-      playerMarker.setLngLat([userLng, userLat]).addTo(map);
-      refreshMapGrid();
-      spawnTrees();
-      initCoinSpawns();
-      spawnNPC();
-      initNPCMovement();
-    
-      map.jumpTo({ center: [userLng, userLat], zoom: 18 });
-    } else {
-      playerMarker.setLngLat([userLng, userLat]);
-      refreshMapGrid();
-      spawnTrees(); // Update trees if user shifted tiles
-      checkCoinProximity();
-      checkNPCProximity();
-  
-      // AUTO-CENTER & COMPASS TRACKING
-      if (autoCenterEnabled) {
-        if (compassActive && heading !== null && !isNaN(heading)) {
-          // Rotate map to face movement direction AND center on player
-          map.easeTo({
-            center: [userLng, userLat],
-            bearing: heading,
-            zoom: 18,
-            duration: 300,
-            essential: true
-          });
-        } else {
-          // Standard re-center: STRICTLY FORCE NORTH UP (bearing: 0)
-          map.easeTo({ 
-            center: [userLng, userLat], 
-            bearing: 0, // <--- Add this line!
-            pitch: 0,
-            zoom: 18, 
-            duration: 500, 
-            essential: true 
-          });
+      initGridScaling(userLat);    
+      requestWakeLock();
+      cleanupDistantCoins();    
+      if (!gameStarted) {
+        gameStarted = true;
+        document.getElementById('start-overlay').style.display = 'none';
+        
+        document.getElementById('ui-panel').style.display = 'block';
+        document.getElementById('toggle-ui-btn').style.display = 'none';    
+        updateGoldDisplay();
+        updateInventoryDisplay();    
+        playerMarker.setLngLat([userLng, userLat]).addTo(map);
+        refreshMapGrid();
+        spawnTrees();
+        initCoinSpawns();
+        spawnNPC();
+        initNPCMovement();    
+        map.jumpTo({ center: [userLng, userLat], zoom: 18 });
+      } else {
+        playerMarker.setLngLat([userLng, userLat]);
+        refreshMapGrid();
+        spawnTrees();
+        checkCoinProximity();
+        checkNPCProximity();    
+        // AUTO-CENTER & COMPASS TRACKING
+        if (autoCenterEnabled) {
+          if (compassActive) {
+            // If walking and GPS heading is available, rotate map to movement direction
+            if (heading !== null && !isNaN(heading)) {
+              map.easeTo({
+                center: [userLng, userLat],
+                bearing: heading,
+                zoom: 18,
+                duration: 300,
+                essential: true
+              });
+            } else {
+              // Standing still: just center position (panTo), do NOT force bearing (lets gyro rotate!)
+              map.panTo([userLng, userLat]);
+            }
+          } else {
+            // Compass is OFF: Strictly force North-Up (bearing: 0)
+            map.easeTo({ 
+              center: [userLng, userLat], 
+              bearing: 0,
+              pitch: 0,
+              zoom: 18, 
+              duration: 500, 
+              essential: true 
+            });
+          }
         }
-      }
-    }
-  
-    const accuracyFt = (e.coords.accuracy * 3.28084).toFixed(0);
-    document.getElementById('status').innerText = `📍 Signal Active (${accuracyFt} ft accuracy)`;
+      }    
+      const accuracyFt = (e.coords.accuracy * 3.28084).toFixed(0);
+      document.getElementById('status').innerText = `📍 Signal Active (${accuracyFt} ft accuracy)`;
   });
 
   geolocate.on('error', (e) => {
@@ -1305,9 +1302,36 @@
     });
 
     // --- COMPASS & ORIENTATION LOGIC ---
-    // let compassActive = false;
     const compassBtn = document.getElementById('compass-btn');
     const compassNeedle = document.getElementById('compass-needle');
+
+    function getScreenOrientationAngle() {
+      if (window.screen && window.screen.orientation && window.screen.orientation.angle !== undefined) {
+        return window.screen.orientation.angle;
+      }
+      return window.orientation || 0;
+    }
+
+    function getHeadingDegrees(event) {
+      let heading = null;
+      if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
+        heading = event.webkitCompassHeading; // iOS
+      } else if (event.alpha !== null && event.alpha !== undefined) {
+        // Android / Standard Chrome calculation
+        heading = (360 - event.alpha + getScreenOrientationAngle()) % 360;
+      }
+      return heading;
+    }
+
+    function handleDeviceOrientation(event) {
+      if (!compassActive) return;
+
+      const heading = getHeadingDegrees(event);
+
+      if (heading !== null && !isNaN(heading)) {
+        map.rotateTo(heading, { duration: 100 });
+      }
+    }
 
     function updateCompassUI() {
       if (!compassNeedle) return;
@@ -1315,32 +1339,17 @@
       compassNeedle.style.transform = `rotate(${-bearing}deg)`;
     }
 
-    // Keep needle facing true North when dragging/spinning the map
+    // Keep compass needle facing physical North whenever map rotates
     map.on('rotate', updateCompassUI);
-
-    function handleDeviceOrientation(event) {
-      if (!compassActive) return;
-
-      let heading = null;
-      if (event.webkitCompassHeading) {
-        heading = event.webkitCompassHeading; // iOS
-      } else if (event.alpha !== null) {
-        heading = 360 - event.alpha; // Android / Standard
-      }
-
-      if (heading !== null) {
-        map.rotateTo(heading, { duration: 100 });
-      }
-    }
 
     if (compassBtn) {
       compassBtn.addEventListener('click', async () => {
         compassActive = !compassActive;
-	  
+
         if (compassActive) {
           autoCenterEnabled = true;
           updateAutoCenterUI();
-	  
+
           if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             try {
               const response = await DeviceOrientationEvent.requestPermission();
@@ -1353,15 +1362,21 @@
               console.error(err);
             }
           }
-	  
+
           compassBtn.classList.add('active');
-          window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+
+          // Prefer absolute orientation on Android if available
+          if ('ondeviceorientationabsolute' in window) {
+            window.addEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
+          } else {
+            window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+          }
         } else {
-          // OFF / RESET: Remove tracking and smoothly ease map back to 0° North
+          // OFF / RESET: Remove listeners and ease map back to 0° North
           compassBtn.classList.remove('active');
+          window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
           window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
-	  
-          // Snap map back to North = Up
+
           map.easeTo({
             bearing: 0,
             pitch: 0,
