@@ -1173,7 +1173,7 @@
       checkCoinProximity();
       checkNPCProximity();
   
-      // 2. AUTO-CENTER & COMPASS TRACKING
+      // AUTO-CENTER & COMPASS TRACKING
       if (autoCenterEnabled) {
         if (compassActive && heading !== null && !isNaN(heading)) {
           // Rotate map to face movement direction AND center on player
@@ -1185,11 +1185,13 @@
             essential: true
           });
         } else {
-          // Standard re-center without forcing map rotation
+          // Standard re-center: STRICTLY FORCE NORTH UP (bearing: 0)
           map.easeTo({ 
             center: [userLng, userLat], 
+            bearing: 0, // <--- Add this line!
+            pitch: 0,
             zoom: 18, 
-            duration: 1000, 
+            duration: 500, 
             essential: true 
           });
         }
@@ -1333,40 +1335,41 @@
 
     if (compassBtn) {
       compassBtn.addEventListener('click', async () => {
-            compassActive = !compassActive;
-      
-            if (compassActive) {
-              // Force Auto-Center back on when enabling compass tracking
-              autoCenterEnabled = true;
-              updateAutoCenterUI();
-      
-              // Request iOS orientation permissions if required
-              if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                  const response = await DeviceOrientationEvent.requestPermission();
-                  if (response !== 'granted') {
-                    compassActive = false;
-                    alert('Device orientation permission denied.');
-                    return;
-                  }
-                } catch (err) {
-                  console.error(err);
-                }
+        compassActive = !compassActive;
+	  
+        if (compassActive) {
+          autoCenterEnabled = true;
+          updateAutoCenterUI();
+	  
+          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+              const response = await DeviceOrientationEvent.requestPermission();
+              if (response !== 'granted') {
+                compassActive = false;
+                alert('Device orientation permission denied.');
+                return;
               }
-      
-              compassBtn.classList.add('active');
-              window.addEventListener('deviceorientation', handleDeviceOrientation, true);
-            } else {
-              // RESET: Turn off compass, keep North UP (0° bearing)
-              compassBtn.classList.remove('active');
-              window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
-      
-              map.easeTo({
-                bearing: 0,
-                duration: 400
-              });
+            } catch (err) {
+              console.error(err);
             }
+          }
+	  
+          compassBtn.classList.add('active');
+          window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+        } else {
+          // OFF / RESET: Remove tracking and smoothly ease map back to 0° North
+          compassBtn.classList.remove('active');
+          window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
+	  
+          // Snap map back to North = Up
+          map.easeTo({
+            bearing: 0,
+            pitch: 0,
+            duration: 500,
+            essential: true
           });
+        }
+      });
     }
     // ------------------------------------
 
