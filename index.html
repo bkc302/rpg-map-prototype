@@ -1169,21 +1169,13 @@
         // AUTO-CENTER & COMPASS TRACKING
         if (autoCenterEnabled) {
           if (compassActive) {
-            // If walking and GPS heading is available, rotate map to movement direction
-            if (heading !== null && !isNaN(heading)) {
-              map.easeTo({
-                center: [userLng, userLat],
-                bearing: heading,
-                zoom: 18,
-                duration: 300,
-                essential: true
-              });
-            } else {
-              // Standing still: just center position (panTo), do NOT force bearing (lets gyro rotate!)
-              map.panTo([userLng, userLat]);
-            }
+            // Instantly snap map center to player without triggering animations that gyro cancels
+            map.jumpTo({
+              center: [userLng, userLat],
+              zoom: 18
+            });
           } else {
-            // Compass is OFF: Strictly force North-Up (bearing: 0)
+            // Compass OFF: Smoothly center and lock North-Up (bearing: 0)
             map.easeTo({ 
               center: [userLng, userLat], 
               bearing: 0,
@@ -1329,7 +1321,16 @@
       const heading = getHeadingDegrees(event);
 
       if (heading !== null && !isNaN(heading)) {
-        map.rotateTo(heading, { duration: 100 });
+        if (autoCenterEnabled && userLat && userLng) {
+          // Instantly lock camera center on player while updating bearing
+          map.jumpTo({
+            center: [userLng, userLat],
+            bearing: heading
+          });
+        } else {
+          // If auto-center is off, just rotate around current map view
+          map.rotateTo(heading, { duration: 50 });
+        }
       }
     }
 
