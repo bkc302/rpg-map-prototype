@@ -160,7 +160,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 1000;
       padding: 0;
       outline: none;
       transition: border-color 0.2s, transform 0.1s;
@@ -347,6 +347,7 @@
   let userLng = null;
   let gameStarted = false;
   let autoCenterEnabled = true;
+  let compassActive = false;
 
   // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
@@ -1139,12 +1140,13 @@
   geolocate.on('geolocate', (e) => {
     userLat = e.coords.latitude;
     userLng = e.coords.longitude;
+    const heading = e.coords.heading; // 1. Grab GPS movement heading from position data
     
     initGridScaling(userLat);
-
+  
     requestWakeLock();
     cleanupDistantCoins();
-
+  
     if (!gameStarted) {
       gameStarted = true;
       document.getElementById('start-overlay').style.display = 'none';
@@ -1170,12 +1172,30 @@
       spawnTrees(); // Update trees if user shifted tiles
       checkCoinProximity();
       checkNPCProximity();
-
+  
+      // 2. AUTO-CENTER & COMPASS TRACKING
       if (autoCenterEnabled) {
-        map.easeTo({ center: [userLng, userLat], zoom: 18, duration: 1000, essential: true });
+        if (compassActive && heading !== null && !isNaN(heading)) {
+          // Rotate map to face movement direction AND center on player
+          map.easeTo({
+            center: [userLng, userLat],
+            bearing: heading,
+            zoom: 18,
+            duration: 300,
+            essential: true
+          });
+        } else {
+          // Standard re-center without forcing map rotation
+          map.easeTo({ 
+            center: [userLng, userLat], 
+            zoom: 18, 
+            duration: 1000, 
+            essential: true 
+          });
+        }
       }
     }
-
+  
     const accuracyFt = (e.coords.accuracy * 3.28084).toFixed(0);
     document.getElementById('status').innerText = `📍 Signal Active (${accuracyFt} ft accuracy)`;
   });
@@ -1258,8 +1278,11 @@
     map.on('zoom', updateTreeVisibility);
 
     map.on('dragstart', () => {
-      if (autoCenterEnabled) {
+      if (autoCenterEnabled || compassActive) {
         autoCenterEnabled = false;
+        compassActive = false;
+        compassBtn.classList.remove('active');
+        window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
         updateAutoCenterUI();
       }
     });
@@ -1280,7 +1303,7 @@
     });
 
     // --- COMPASS & ORIENTATION LOGIC ---
-    let compassActive = false;
+    // let compassActive = false;
     const compassBtn = document.getElementById('compass-btn');
     const compassNeedle = document.getElementById('compass-needle');
 
@@ -1310,35 +1333,40 @@
 
     if (compassBtn) {
       compassBtn.addEventListener('click', async () => {
-        compassActive = !compassActive;
-
-        if (compassActive) {
-          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try {
-              const response = await DeviceOrientationEvent.requestPermission();
-              if (response !== 'granted') {
-                compassActive = false;
-                alert('Device orientation permission denied.');
-                return;
+            compassActive = !compassActive;
+      
+            if (compassActive) {
+              // Force Auto-Center back on when enabling compass tracking
+              autoCenterEnabled = true;
+              updateAutoCenterUI();
+      
+              // Request iOS orientation permissions if required
+              if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                  const response = await DeviceOrientationEvent.requestPermission();
+                  if (response !== 'granted') {
+                    compassActive = false;
+                    alert('Device orientation permission denied.');
+                    return;
+                  }
+                } catch (err) {
+                  console.error(err);
+                }
               }
-            } catch (err) {
-              console.error(err);
+      
+              compassBtn.classList.add('active');
+              window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+            } else {
+              // RESET: Turn off compass, keep North UP (0° bearing)
+              compassBtn.classList.remove('active');
+              window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
+      
+              map.easeTo({
+                bearing: 0,
+                duration: 400
+              });
             }
-          }
-
-          compassBtn.classList.add('active');
-          window.addEventListener('deviceorientation', handleDeviceOrientation, true);
-        } else {
-          compassBtn.classList.remove('active');
-          window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
-
-          map.easeTo({
-            bearing: 0,
-            pitch: 0,
-            duration: 500
           });
-        }
-      });
     }
     // ------------------------------------
 
