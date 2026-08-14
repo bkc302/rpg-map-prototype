@@ -380,8 +380,10 @@
   // NPC Merchant State
   let npcNode = null;
   const NPC_TALK_RADIUS_FEET = 80;
-  let npcDisabled = false;
-  
+
+  const savedNpcDisabled = localStorage.getItem('rpg_npc_disabled');
+  let npcDisabled = savedNpcDisabled === 'true';
+
   // Gold pickup sound effect
   const coinAudio = new Audio('coin.mp3');
 
@@ -765,12 +767,14 @@
   }
 
   function renderNPCCard() {
+    // If Pete is permanently disabled, do nothing at all
+    if (npcDisabled) return;
+
     if (!npcNode || !userLat || !userLng) return;
   
     const dist = getDistanceFeet(userLat, userLng, npcNode.lat, npcNode.lng);
     const distRounded = dist.toFixed(0);
     const inRange = dist <= NPC_TALK_RADIUS_FEET;
-    const hasAxe = playerInventory.has('axe');
     const container = document.getElementById('plot-info');
   
     if (!inRange) {
@@ -781,16 +785,8 @@
       `;
       return;
     }
-  
-    if (hasAxe) {
-      container.innerHTML = `
-        <b>Timber Pete:</b><br/>
-        <i>"Good luck out there with that axe, adventurer!"</i><br/>
-        <small style="color:#a855f7;">✨ You already own the Lumberjack Axe.</small>
-      `;
-      return;
-    }
-  
+
+    // Player does NOT have axe → show purchase UI
     const canAfford = playerGold >= AXE_PRICE;
     const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
     const disabledAttr = canAfford ? '' : 'disabled';
@@ -807,7 +803,7 @@
       document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
     }
   }
-  
+
   function buyAxe() {
     if (playerGold >= AXE_PRICE && !playerInventory.has('axe')) {
       playerGold -= AXE_PRICE;
@@ -816,16 +812,19 @@
       localStorage.setItem('rpg_player_gold', playerGold);
       localStorage.setItem('rpg_player_inventory', JSON.stringify(Array.from(playerInventory)));
   
-      updateGoldDisplay();
-      updateInventoryDisplay();
-  
-      // Remove Timber Pete permanently
+      // Permanently disable Timber Pete
       npcDisabled = true;
+      localStorage.setItem('rpg_npc_disabled', 'true');
+  
       if (npcNode && npcNode.marker) {
         npcNode.marker.remove();
         npcNode = null;
       }
   
+      updateGoldDisplay();
+      updateInventoryDisplay();
+  
+      // Show farewell message ONCE, at the moment Pete leaves
       document.getElementById('status').innerText = '🪓 Acquired Lumberjack Axe!';
       document.getElementById('plot-info').innerHTML = `
         <b>Timber Pete:</b><br/>
@@ -833,7 +832,6 @@
       `;
     }
   }
-
 
   function cleanupDistantCoins() {
     if (!userLat || !userLng) return;
