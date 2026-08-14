@@ -295,7 +295,6 @@
 
 <!-- Start Screen Overlay -->
 <div id="start-overlay">
-  <h1>⚔️ GPS Land Claimer</h1>
   <p>Acquire your GPS location to generate local territory grid squares and gold coins around you.</p>
   <button id="start-btn" class="btn gps-btn">📍 Find My Location & Start</button>
   <div id="start-status"></div>
@@ -309,7 +308,6 @@
   <!-- Close Button -->
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
-  <h3>⚔️ GPS Land Claimer</h3>
   <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
   <div id="inventory-display">🎒 Inventory: <span id="inventory-list">Empty</span></div>
   <div id="status">GPS Active</div>
@@ -1037,7 +1035,6 @@
 
     if (claimedPlotIds.has(selectedPlotId)) {
       container.innerHTML = `
-        <b>Plot ID:</b> ${selectedPlotId}<br/>
         <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span>
       `;
     } else {
@@ -1046,7 +1043,6 @@
       const disabledAttr = canAfford ? '' : 'disabled';
 
       container.innerHTML = `
-        <b>Plot ID:</b> ${selectedPlotId}<br/>
         <b>Price:</b> 💰 ${PLOT_PRICE} Gold<br/>
         <b>Status:</b> <span class="badge wild">Wilderness</span><br/>
         <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>${buttonText}</button>
