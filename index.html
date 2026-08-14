@@ -309,7 +309,7 @@
   <!-- Close Button -->
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
-  <div id="gold-display">💰 Gold: <span id="gold-amount">100</span></div>
+  <div id="gold-display">💰 Gold: <span id="gold-amount">0</span></div>
   <div id="inventory-display">🎒 Inventory: <span id="inventory-list">Empty</span></div>
   <div id="status">GPS Active</div>
   <button id="autocenter-button" class="btn autocenter-on">🎯 Auto-Center: ON</button>
@@ -350,14 +350,14 @@
 
   // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
-  let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 100;
+  let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 0;
   
   const savedWood = localStorage.getItem('rpg_player_wood');
   let playerWood = (savedWood !== null) ? parseInt(savedWood, 10) : 0;
   
   const PLOT_PRICE = 100;
   const AXE_PRICE = 20;
-  const TREE_CUT_RADIUS_FEET = 80;
+  const TREE_CUT_RADIUS_FEET = 100;
   const TREE_RESPAWN_MS = 15 * 60 * 1000; // 15 Minutes
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
@@ -374,12 +374,12 @@
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
   const MAX_GOLD_NODES = 30;
-  const PICKUP_RADIUS_FEET = 80;
+  const PICKUP_RADIUS_FEET = 100;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
   
   // NPC Merchant State
   let npcNode = null;
-  const NPC_TALK_RADIUS_FEET = 80;
+  const NPC_TALK_RADIUS_FEET = 100;
 
   const savedNpcDisabled = localStorage.getItem('rpg_npc_disabled');
   let npcDisabled = savedNpcDisabled === 'true';
@@ -590,7 +590,7 @@
       container.innerHTML = `
         <b>🌲 Pine Tree:</b><br/>
         <b>Distance:</b> ${dist} ft away<br/>
-        <small style="color:#ef4444;">Walk within 80 ft to chop down!</small>
+        <small style="color:#ef4444;">Walk within 100 ft to chop down!</small>
       `;
       return;
     }
@@ -781,7 +781,7 @@
       container.innerHTML = `
         <b>Timber Pete:</b><br/>
         <b>Distance:</b> ${distRounded} ft away<br/>
-        <small style="color:#ef4444;">Walk within 80 ft to trade with him!</small>
+        <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
       `;
       return;
     }
@@ -923,7 +923,7 @@
           <b>${valueLabel}:</b> +${coinValue} Gold<br/>
           <b>Grid Square:</b> ${cellId}<br/>
           <b>Distance:</b> ${dist} ft away<br/>
-          <small style="color:#94a3b8;">Walk within 80 ft to pick up!</small>
+          <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
         `;
       });
   
