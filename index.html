@@ -380,6 +380,7 @@
   // NPC Merchant State
   let npcNode = null;
   const NPC_TALK_RADIUS_FEET = 80;
+  let npcDisabled = false;
   
   // Gold pickup sound effect
   const coinAudio = new Audio('coin.mp3');
@@ -525,7 +526,14 @@
   
           const treeImg = document.createElement('img');
           treeImg.className = 'tree-marker-icon';
-          treeImg.src = 'tree.png';
+          
+          // If tree is chopped and still in cooldown → show cut_tree.png
+          if (choppedTrees[tileKey] && (now - choppedTrees[tileKey] < TREE_RESPAWN_MS)) {
+            treeImg.src = 'cut_tree.png';
+          } else {
+            treeImg.src = 'tree.png';
+          }
+          
           treeContainer.appendChild(treeImg);
   
           const marker = new maplibregl.Marker({
@@ -595,34 +603,52 @@
   }
 
   function chopTree(treeNode) {
-    if (!playerInventory.has('axe')) return;
-
-    // Weighted wood yield (1 common -> 5 rare)
-    // 1 (40%), 2 (30%), 3 (15%), 4 (10%), 5 (5%)
-    const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
-    const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
-
-    playerWood += woodYield;
-    localStorage.setItem('rpg_player_wood', playerWood);
-    updateInventoryDisplay();
-
-    // Mark tree as chopped with current timestamp
-    choppedTrees[treeNode.tileKey] = Date.now();
-    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-
-    // Remove tree from map
-    treeNode.marker.remove();
-    const index = activeTreeNodes.indexOf(treeNode);
-    if (index !== -1) activeTreeNodes.splice(index, 1);
-
-    const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
-    document.getElementById('status').innerText = yieldText;
-
-    document.getElementById('plot-info').innerHTML = `
-      <b>🌲 Pine Tree:</b><br/>
-      <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
-      <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
-    `;
+      if (!playerInventory.has('axe')) return;
+  
+      // Weighted wood yield (1 common -> 5 rare)
+      const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
+      const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
+  
+      playerWood += woodYield;
+      localStorage.setItem('rpg_player_wood', playerWood);
+      updateInventoryDisplay();
+  
+      // Mark tree as chopped with current timestamp
+      choppedTrees[treeNode.tileKey] = Date.now();
+      localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+  
+      // Remove tree from map
+      treeNode.marker.remove();
+      const index = activeTreeNodes.indexOf(treeNode);
+      if (index !== -1) activeTreeNodes.splice(index, 1);
+  
+      // Replace with cut tree marker
+      const cutContainer = document.createElement('div');
+      cutContainer.className = 'tree-marker-container';
+  
+      const cutImg = document.createElement('img');
+      cutImg.className = 'tree-marker-icon';
+      cutImg.src = 'cut_tree.png';
+      cutContainer.appendChild(cutImg);
+  
+      const cutMarker = new maplibregl.Marker({
+        element: cutContainer,
+        anchor: 'center'
+      }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
+  
+      // Replace old node with cut version
+      treeNode.marker = cutMarker;
+      treeNode.element = cutContainer;
+      activeTreeNodes.push(treeNode);
+  
+      const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
+      document.getElementById('status').innerText = yieldText;
+  
+      document.getElementById('plot-info').innerHTML = `
+        <b>🌲 Pine Tree:</b><br/>
+        <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
+        <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
+      `;
   }
 
   // Toggles tree visibility so they are only displayed at zoom level >= 18
@@ -635,6 +661,7 @@
 
   // Spawns Timber Pete inside the player's 9x9 grid
   function spawnNPC() {
+	if (npcDisabled) return;
     if (!userLat || !userLng) return;
 
     if (npcNode && npcNode.marker) {
@@ -684,6 +711,7 @@
   }
   
   function moveNPC() {
+    if (npcDisabled) return;
     if (!npcNode || !userLat || !userLng) return;
 
     const gridRadius = 4;
@@ -718,6 +746,7 @@
   }
   
   function checkNPCProximity() {
+    if (npcDisabled) return;
     if (!npcNode || !userLat || !userLng) return;
 
     const gridRadius = 4;
@@ -778,21 +807,33 @@
       document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
     }
   }
-
+  
   function buyAxe() {
     if (playerGold >= AXE_PRICE && !playerInventory.has('axe')) {
       playerGold -= AXE_PRICE;
       playerInventory.add('axe');
-
+  
       localStorage.setItem('rpg_player_gold', playerGold);
       localStorage.setItem('rpg_player_inventory', JSON.stringify(Array.from(playerInventory)));
-
+  
       updateGoldDisplay();
       updateInventoryDisplay();
-      renderNPCCard();
+  
+      // Remove Timber Pete permanently
+      npcDisabled = true;
+      if (npcNode && npcNode.marker) {
+        npcNode.marker.remove();
+        npcNode = null;
+      }
+  
       document.getElementById('status').innerText = '🪓 Acquired Lumberjack Axe!';
+      document.getElementById('plot-info').innerHTML = `
+        <b>Timber Pete:</b><br/>
+        <small style="color:#94a3b8;">He has left the forest.</small>
+      `;
     }
   }
+
 
   function cleanupDistantCoins() {
     if (!userLat || !userLng) return;
