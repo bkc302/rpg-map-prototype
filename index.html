@@ -400,7 +400,7 @@
   const PLOT_PRICE = 100;
   const AXE_PRICE = 20;
   const TREE_CUT_RADIUS_FEET = 100;
-  const TREE_RESPAWN_MS = 15 * 60 * 1000; // 15 Minutes
+  const TREE_RESPAWN_MS = 5 * 60 * 1000; // 5 Minutes
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
   const claimedPlotIds = new Set(savedPlots);
@@ -588,6 +588,11 @@ function spawnTrees() {
           element: treeContainer,
           anchor: 'center'
         }).setLngLat([treeLng, treeLat]).addTo(map);
+		
+		// Disable clicking on stump
+        if (isChopped) {
+            treeContainer.style.pointerEvents = "none";
+        }
 
         const treeNode = {
           tileKey: tileKey,
@@ -697,7 +702,7 @@ function spawnTrees() {
       document.getElementById('plot-info').innerHTML = `
         <b>🌲 Pine Tree:</b><br/>
         <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
-        <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
+        <small style="color:#94a3b8;">Respawns in 5 minutes.</small>
       `;
   }
 
