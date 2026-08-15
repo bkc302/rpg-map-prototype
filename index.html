@@ -507,93 +507,94 @@
   
 
   // Spawns trees deterministically across the 9x9 grid, respecting chopped respawn timers
-  function spawnTrees() {
-    if (!userLat || !userLng) return;
-  
-    const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
-    const newCenterKey = `${centerGridY}_${centerGridX}`;
-  
-    if (currentGridCenterKey === newCenterKey) {
-      updateTreeVisibility();
-      return;
-    }
-  
-    currentGridCenterKey = newCenterKey;
-    clearTrees();
-  
-    const gridRadius = 4;
-    const TREE_DENSITY_THRESHOLD = 0.20; 
-    const isVisible = map.getZoom() >= 17.5;
-    const now = Date.now();
-  
-    for (let x = -gridRadius; x <= gridRadius; x++) {
-      for (let y = -gridRadius; y <= gridRadius; y++) {
-        const tileGridX = centerGridX + x;
-        const tileGridY = centerGridY + y;
-        const tileKey = `${tileGridY}_${tileGridX}`;
+function spawnTrees() {
+  if (!userLat || !userLng) return;
 
-        // Skip tree if it was chopped down less than 15 minutes ago
-        if (choppedTrees[tileKey]) {
-          if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
-            continue; // Tree is still regrowing
-          } else {
-            delete choppedTrees[tileKey]; // Respawn time elapsed, remove record
-            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-          }
+  const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
+  const newCenterKey = `${centerGridY}_${centerGridX}`;
+
+  if (currentGridCenterKey === newCenterKey) {
+    updateTreeVisibility();
+    return;
+  }
+
+  currentGridCenterKey = newCenterKey;
+  clearTrees();
+
+  const gridRadius = 4;
+  const TREE_DENSITY_THRESHOLD = 0.20;
+  const isVisible = map.getZoom() >= 17.5;
+  const now = Date.now();
+
+  for (let x = -gridRadius; x <= gridRadius; x++) {
+    for (let y = -gridRadius; y <= gridRadius; y++) {
+
+      const tileGridX = centerGridX + x;
+      const tileGridY = centerGridY + y;
+      const tileKey = `${tileGridY}_${tileGridX}`;
+
+      // Determine if tree should be stump or full tree
+      let isChopped = false;
+
+      if (choppedTrees[tileKey]) {
+        if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
+          isChopped = true; // stump should appear
+        } else {
+          // Respawn tree after cooldown
+          delete choppedTrees[tileKey];
+          localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
         }
+      }
 
-        const tileSeed = getTileRandom(tileGridX, tileGridY);
-  
-        if (tileSeed < TREE_DENSITY_THRESHOLD) {
-          const treeLat = (tileGridY + 0.50) * LAT_GRID_SIZE_DEG;
-          const treeLng = (tileGridX + 0.50) * LNG_GRID_SIZE_DEG;
-  
-          const treeContainer = document.createElement('div');
-          treeContainer.className = 'tree-marker-container';
-          treeContainer.style.display = isVisible ? 'flex' : 'none';
-  
-          const treeImg = document.createElement('img');
-          treeImg.className = 'tree-marker-icon';
-          
-          // If tree is chopped and still in cooldown → show cut_tree.png
-          if (choppedTrees[tileKey] && (now - choppedTrees[tileKey] < TREE_RESPAWN_MS)) {
-            treeImg.src = 'cut_tree.png';
-          } else {
-            treeImg.src = 'tree.png';
-          }
-          
-          treeContainer.appendChild(treeImg);
-  
-          const marker = new maplibregl.Marker({
-            element: treeContainer,
-            anchor: 'center'
-          }).setLngLat([treeLng, treeLat]).addTo(map);
+      const tileSeed = getTileRandom(tileGridX, tileGridY);
 
-          const treeNode = {
-            tileKey: tileKey,
-            lat: treeLat,
-            lng: treeLng,
-            marker: marker,
-            element: treeContainer
-          };
-  
-          activeTreeNodes.push(treeNode);
+      if (tileSeed < TREE_DENSITY_THRESHOLD) {
 
-          // Stop map click/touch events from selecting the grid tile underneath
-          ['click', 'touchstart', 'mousedown'].forEach(eventType => {
-            treeContainer.addEventListener(eventType, (e) => {
-              e.stopPropagation();
-            });
+        const treeLat = (tileGridY + 0.50) * LAT_GRID_SIZE_DEG;
+        const treeLng = (tileGridX + 0.50) * LNG_GRID_SIZE_DEG;
+
+        const treeContainer = document.createElement('div');
+        treeContainer.className = 'tree-marker-container';
+        treeContainer.style.display = isVisible ? 'flex' : 'none';
+
+        const treeImg = document.createElement('img');
+        treeImg.className = 'tree-marker-icon';
+
+        // Use isChopped flag to decide image
+        treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
+
+        treeContainer.appendChild(treeImg);
+
+        const marker = new maplibregl.Marker({
+          element: treeContainer,
+          anchor: 'center'
+        }).setLngLat([treeLng, treeLat]).addTo(map);
+
+        const treeNode = {
+          tileKey: tileKey,
+          lat: treeLat,
+          lng: treeLng,
+          marker: marker,
+          element: treeContainer
+        };
+
+        activeTreeNodes.push(treeNode);
+
+        // Prevent map click-through
+        ['click', 'touchstart', 'mousedown'].forEach(eventType => {
+          treeContainer.addEventListener(eventType, (e) => {
+            e.stopPropagation();
           });
+        });
 
-          // Open the Pine Tree card
-          treeContainer.addEventListener('click', () => {
-            renderTreeCard(treeNode);
-          });
-        }
+        // Open tree card
+        treeContainer.addEventListener('click', () => {
+          renderTreeCard(treeNode);
+        });
       }
     }
   }
+}
   
   function renderTreeCard(treeNode) {
     if (!userLat || !userLng) return;
