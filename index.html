@@ -1266,6 +1266,14 @@ function spawnTrees() {
       // Force tree refresh
       currentGridCenterKey = null;
       spawnTrees();
+	  
+      // Reset NPC state
+      localStorage.removeItem('rpg_npc_disabled');
+      npcDisabled = false;
+      npcNode = null;
+      
+      // Respawn Pete immediately
+      spawnNPC();
       
       alert("Save data cleared!");
     }
