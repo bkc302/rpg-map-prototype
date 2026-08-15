@@ -689,6 +689,9 @@ function spawnTrees() {
           element: cutContainer,
           anchor: 'center'
       }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
+	  
+      // Disable clicking on stump
+      cutContainer.style.pointerEvents = "none";
   
       // Update existing node instead of replacing or re-adding it
       treeNode.marker = cutMarker;
