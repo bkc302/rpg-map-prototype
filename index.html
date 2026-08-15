@@ -604,6 +604,7 @@ function spawnTrees() {
 
         // Open tree card
         treeContainer.addEventListener('click', () => {
+          ensureUIPanelVisible();
           renderTreeCard(treeNode);
         });
       }
@@ -1235,6 +1236,16 @@ function spawnTrees() {
       btn.innerText = '📍 Auto-Center: OFF (Tap to Lock)';
     }
   }
+  
+function ensureUIPanelVisible() {
+    const uiPanel = document.getElementById('ui-panel');
+    const toggleBtn = document.getElementById('toggle-ui-btn');
+
+    if (uiPanel.style.display === 'none') {
+        uiPanel.style.display = 'block';
+        toggleBtn.style.display = 'none';
+    }
+}
 
   // UI & GEOLOCATION EVENT LISTENERS
    document.getElementById('dev-reset-btn').addEventListener('click', () => {
