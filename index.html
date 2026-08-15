@@ -632,7 +632,7 @@ function spawnTrees() {
       container.innerHTML = `
         <b>🌲 Pine Tree:</b><br/>
         <b>Distance:</b> ${dist} ft away<br/>
-        <small style="color:#ef4444;">⚠️ You need a Lumberjack Axe to chop this tree!</small>
+        <small style="font-size:14px; color:#f7f7f7;">⚠️ You need an Axe to chop this tree!</small>
       `;
       return;
     }
@@ -641,7 +641,7 @@ function spawnTrees() {
       container.innerHTML = `
         <b>🌲 Pine Tree:</b><br/>
         <b>Distance:</b> ${dist} ft away<br/>
-        <small style="color:#ef4444;">Walk within 100 ft to chop down!</small>
+        <small style="font-size:14px; color:#f7f7f7;">Walk within 100 ft to chop down!</small>
       `;
       return;
     }
@@ -919,7 +919,7 @@ function spawnTrees() {
     container.innerHTML = `
       <b>Timber Pete:</b><br/>
       <i>"Need something for chopping wood?"</i><br/>
-      <b>Item:</b> 🪓 Lumberjack Axe<br/>
+      <b>Item:</b> 🪓 Axe<br/>
       <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
       <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
     `;
@@ -950,7 +950,7 @@ function spawnTrees() {
       updateInventoryDisplay();
   
       // Show farewell message ONCE, at the moment Pete leaves
-      document.getElementById('status').innerText = '🪓 Acquired Lumberjack Axe!';
+      document.getElementById('status').innerText = '🪓 Acquired an Axe!';
       document.getElementById('plot-info').innerHTML = `
         <b>Timber Pete:</b><br/>
         <small style="color:#94a3b8;">He has left the forest.</small>
