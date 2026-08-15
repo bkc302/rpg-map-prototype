@@ -306,11 +306,10 @@
   <ul style="text-align:left; max-width:300px; margin:0 auto;">
     <li>⛏️ Mining Pick</li>
     <li>🪨 Ore Nodes</li>
-    <li>🏠 Houses/Castles/Forts (maybe, I don't know)</li>
+    <li>🏠 Houses/Castles/Forts (?)</li>
     <li>🛒 Market</li>
     <li>🛠️ Crafting Stations</li>
-    <li>🔪 Weapons</li>
-    <li>⚔️ Combat (against what? who knows)</li>
+    <li>⚔️ Weapons/Combat (against what? who knows)</li>
     <li>🧍 More NPCs</li>
   </ul>
 
@@ -318,7 +317,7 @@
   <p style="font-size:14px; color:#ef4444;">
     • Do NOT trespass on private property while playing.<br>
     • Hydrate or perish — drink water.<br>
-    • Beware snakes, raccoons, coyotes, and dog poo.<br>
+    • Beware of snakes, raccoons, coyotes, and dog poo.<br>
     • Do not attempt to swim while playing (you will lose).<br>
     • If you fall in a hole, that’s on you.<br>
   </p>
@@ -343,6 +342,23 @@
   <div id="plot-card">
     <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
   </div>
+  
+<div id="chop-progress" style="
+  width: 200px;
+  height: 20px;
+  background: #444;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 10px;
+  display: none;
+">
+  <div id="chop-progress-bar" style="
+    height: 100%;
+    width: 100%;
+    background: #22c55e;
+    transition: width 1s linear;
+  "></div>
+</div>
 
   <!-- Dev Reset Button -->
   <button id="dev-reset-btn" style="margin-top: 12px; width: 100%; padding: 6px; background: #991b1b; color: #fecaca; border: 1px solid #dc2626; border-radius: 6px; font-size: 11px; cursor: pointer;">
@@ -412,6 +428,9 @@
 
   // Gold pickup sound effect
   const coinAudio = new Audio('coin.mp3');
+  
+  // Tree chop sound effect
+  const chopSound = new Audio('axe_chop.mp3');
 
   // Tree Decoration System
   let activeTreeNodes = [];
@@ -628,56 +647,59 @@ function spawnTrees() {
       <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
     `;
 
-    document.getElementById('chop-tree-btn').addEventListener('click', () => chopTree(treeNode));
+    document.getElementById('chop-tree-btn').addEventListener('click', () => {
+      startChopCountdown(treeNode);
+    });
+
   }
 
-function chopTree(treeNode) {
-    if (!playerInventory.has('axe')) return;
-
-    // Weighted wood yield (1 common -> 5 rare)
-    const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
-    const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
-
-    playerWood += woodYield;
-    localStorage.setItem('rpg_player_wood', playerWood);
-    updateInventoryDisplay();
-
-    // Mark tree as chopped with current timestamp
-    choppedTrees[treeNode.tileKey] = Date.now();
-    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-
-    // Remove old tree marker (but DO NOT remove the node from activeTreeNodes)
-    treeNode.marker.remove();
-
-    // Create cut-tree marker
-    const cutContainer = document.createElement('div');
-    cutContainer.className = 'tree-marker-container';
-
-    const cutImg = document.createElement('img');
-    cutImg.className = 'tree-marker-icon';
-    cutImg.src = 'cut_tree.png';
-    cutContainer.appendChild(cutImg);
-
-    const cutMarker = new maplibregl.Marker({
-        element: cutContainer,
-        anchor: 'center'
-    }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
-
-    // Update existing node instead of replacing or re-adding it
-    treeNode.marker = cutMarker;
-    treeNode.element = cutContainer;
-
-    // DO NOT push treeNode again — it already exists in activeTreeNodes
-
-    const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
-    document.getElementById('status').innerText = yieldText;
-
-    document.getElementById('plot-info').innerHTML = `
-      <b>🌲 Pine Tree:</b><br/>
-      <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
-      <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
-    `;
-}
+  function chopTree(treeNode) {
+      if (!playerInventory.has('axe')) return;
+  
+      // Weighted wood yield (1 common -> 5 rare)
+      const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
+      const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
+  
+      playerWood += woodYield;
+      localStorage.setItem('rpg_player_wood', playerWood);
+      updateInventoryDisplay();
+  
+      // Mark tree as chopped with current timestamp
+      choppedTrees[treeNode.tileKey] = Date.now();
+      localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+  
+      // Remove old tree marker (but DO NOT remove the node from activeTreeNodes)
+      treeNode.marker.remove();
+  
+      // Create cut-tree marker
+      const cutContainer = document.createElement('div');
+      cutContainer.className = 'tree-marker-container';
+  
+      const cutImg = document.createElement('img');
+      cutImg.className = 'tree-marker-icon';
+      cutImg.src = 'cut_tree.png';
+      cutContainer.appendChild(cutImg);
+  
+      const cutMarker = new maplibregl.Marker({
+          element: cutContainer,
+          anchor: 'center'
+      }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
+  
+      // Update existing node instead of replacing or re-adding it
+      treeNode.marker = cutMarker;
+      treeNode.element = cutContainer;
+  
+      // DO NOT push treeNode again — it already exists in activeTreeNodes
+  
+      const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
+      document.getElementById('status').innerText = yieldText;
+  
+      document.getElementById('plot-info').innerHTML = `
+        <b>🌲 Pine Tree:</b><br/>
+        <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
+        <small style="color:#94a3b8;">Respawns in 15 minutes.</small>
+      `;
+  }
 
   // Toggles tree visibility so they are only displayed at zoom level >= 18
   function updateTreeVisibility() {
@@ -686,7 +708,76 @@ function chopTree(treeNode) {
       node.element.style.display = isVisible ? 'flex' : 'none';
     });
   }
+  
+  let chopInterval = null;
+  let chopCancelCheck = null;
 
+  function startChopCountdown(treeNode) {
+    const container = document.getElementById('plot-info');
+    const progressBox = document.getElementById('chop-progress');
+    const progressBar = document.getElementById('chop-progress-bar');
+
+    let secondsLeft = 5;
+
+    // Show progress bar
+    progressBox.style.display = 'block';
+    progressBar.style.width = '100%';
+
+    container.innerHTML = `
+      <b>🪓 Chopping Tree...</b><br/>
+      <small>Stay within range for 5 seconds!</small>
+    `;
+
+    // Play chop sound immediately
+    chopSound.play();
+
+    // Play sound every second + shrink bar
+    chopInterval = setInterval(() => {
+        secondsLeft--;
+
+        // Shrink bar (reverse loading)
+        const percent = (secondsLeft / 5) * 100;
+        progressBar.style.width = percent + '%';
+
+        chopSound.play();
+
+        if (secondsLeft <= 0) {
+            finishChop(treeNode);
+        }
+    }, 1000);
+
+    // Check if player walks away
+    chopCancelCheck = setInterval(() => {
+        const dist = getDistanceFeet(userLat, userLng, treeNode.lat, treeNode.lng);
+
+        if (dist > TREE_CUT_RADIUS_FEET) {
+            cancelChop();
+        }
+    }, 300);
+  }
+  
+  function cancelChop() {
+    clearInterval(chopInterval);
+    clearInterval(chopCancelCheck);
+
+    document.getElementById('chop-progress').style.display = 'none';
+
+    document.getElementById('plot-info').innerHTML = `
+      <b>❌ Chop Cancelled</b><br/>
+      <small>You moved too far away!</small>
+    `;
+  }
+  
+  function finishChop(treeNode) {
+    clearInterval(chopInterval);
+    clearInterval(chopCancelCheck);
+
+    document.getElementById('chop-progress').style.display = 'none';
+
+    // Actually chop the tree
+    chopTree(treeNode);
+  }
+  
   // Spawns Timber Pete inside the player's 9x9 grid
   function spawnNPC() {
 	if (npcDisabled) return;
