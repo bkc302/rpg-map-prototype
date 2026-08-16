@@ -111,6 +111,7 @@
       top: 80px;
       left: 12px;
       z-index: 999;
+	  display: none;
     }
     
     #inventory-panel {
@@ -664,6 +665,7 @@ function spawnTrees() {
 
         // Open tree card
         treeContainer.addEventListener('click', () => {
+		  closeBackpackIfOpen(false);
           ensureUIPanelVisible();
           renderTreeCard(treeNode);
         });
@@ -885,6 +887,7 @@ function spawnTrees() {
 
     npcContainer.addEventListener('click', (e) => {
       e.stopPropagation();
+	  closeBackpackIfOpen(false);
       ensureUIPanelVisible();
       renderNPCCard();
     });
@@ -1094,6 +1097,7 @@ function spawnTrees() {
   
       goldContainer.addEventListener('click', (e) => {
         e.stopPropagation();
+		closeBackpackIfOpen(false);
         ensureUIPanelVisible();
         const dist = getDistanceFeet(userLat, userLng, goldLat, goldLng).toFixed(0);
         const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
@@ -1286,6 +1290,7 @@ function spawnTrees() {
       localStorage.setItem('rpg_claimed_plots', JSON.stringify(Array.from(claimedPlotIds)));
   
       updateGoldDisplay();
+	  closeBackpackIfOpen(false);
       ensureUIPanelVisible();
       renderSelectedPlotCard();
       refreshMapGrid();
@@ -1303,15 +1308,30 @@ function spawnTrees() {
     }
   }
   
-function ensureUIPanelVisible() {
-    const uiPanel = document.getElementById('ui-panel');
-    const toggleBtn = document.getElementById('toggle-ui-btn');
-
-    if (uiPanel.style.display === 'none') {
-        uiPanel.style.display = 'block';
-        toggleBtn.style.display = 'none';
-    }
-}
+  function ensureUIPanelVisible() {
+      const uiPanel = document.getElementById('ui-panel');
+      const toggleBtn = document.getElementById('toggle-ui-btn');
+  
+      if (uiPanel.style.display === 'none') {
+          uiPanel.style.display = 'block';
+          toggleBtn.style.display = 'none';
+      }
+  }
+  
+  function closeBackpackIfOpen(restoreButton = true) {
+      const invPanel = document.getElementById('inventory-panel');
+      const invBtn = document.getElementById('inventory-btn');
+  
+      if (invPanel.style.display === 'block') {
+          invPanel.style.display = 'none';
+  
+          if (restoreButton) {
+              invBtn.style.display = 'block';
+          } else {
+              invBtn.style.display = 'none';
+          }
+      }
+  }
 
   // UI & GEOLOCATION EVENT LISTENERS
    document.getElementById('dev-reset-btn').addEventListener('click', () => {
@@ -1367,19 +1387,25 @@ function ensureUIPanelVisible() {
   document.getElementById('close-ui-btn').addEventListener('click', () => {
     document.getElementById('ui-panel').style.display = 'none';
     document.getElementById('toggle-ui-btn').style.display = 'block';
+	document.getElementById('inventory-btn').style.display = 'block';
   });
   
   document.getElementById('toggle-ui-btn').addEventListener('click', () => {
     document.getElementById('ui-panel').style.display = 'block';
     document.getElementById('toggle-ui-btn').style.display = 'none';
+	document.getElementById('inventory-btn').style.display = 'none';
   });
   
   document.getElementById('inventory-btn').addEventListener('click', () => {
     document.getElementById('inventory-panel').style.display = 'block';
+    document.getElementById('inventory-btn').style.display = 'none';
+    document.getElementById('toggle-ui-btn').style.display = 'none';
   });
 
   document.getElementById('close-inventory-btn').addEventListener('click', () => {
     document.getElementById('inventory-panel').style.display = 'none';
+	document.getElementById('inventory-btn').style.display = 'block';
+	document.getElementById('toggle-ui-btn').style.display = 'block';
   });
 
   geolocate.on('geolocate', (e) => {
@@ -1395,7 +1421,8 @@ function ensureUIPanelVisible() {
         document.getElementById('start-overlay').style.display = 'none';
         
         document.getElementById('ui-panel').style.display = 'block';
-        document.getElementById('toggle-ui-btn').style.display = 'none';    
+        document.getElementById('toggle-ui-btn').style.display = 'none';
+		document.getElementById('inventory-btn').style.display = 'none';
         updateGoldDisplay();
         updateInventoryDisplay();    
         playerMarker.setLngLat([userLng, userLat]).addTo(map);
@@ -1532,6 +1559,7 @@ function ensureUIPanelVisible() {
 
     map.on('click', 'plots-fill', (e) => {
       if (e.features.length > 0) {
+	    closeBackpackIfOpen(false);
         selectedPlotId = e.features[0].properties.plotId;
         ensureUIPanelVisible();
         renderSelectedPlotCard();
