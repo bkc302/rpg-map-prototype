@@ -19,7 +19,7 @@
     #start-overlay {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(13, 17, 23, 0.96);
+      background: rgba(13, 17, 23, 1.00);
       z-index: 1000;
       display: flex;
       flex-direction: column;
@@ -49,7 +49,7 @@
       width: 300px;
       max-width: calc(100vw - 24px);
       box-sizing: border-box;
-      background: rgba(13, 17, 23, 0.92); 
+      background: rgba(13, 17, 23, 0.70); 
       color: #e6edf3;
       padding: 14px 18px; 
       border-radius: 12px; 
@@ -121,7 +121,7 @@
       z-index: 1000;
       width: 300px;
       max-width: calc(100vw - 24px);
-      background: rgba(13, 17, 23, 0.92);
+      background: rgba(13, 17, 23, 0.70);
       color: #e6edf3;
       padding: 14px 18px;
       border-radius: 12px;
@@ -161,7 +161,7 @@
       width: 180px;        /* wider */
       height: 46px;        /* consistent height */
       padding: 10px 14px;  /* same padding */
-      background: rgba(13, 17, 23, 0.92);
+      background: rgba(13, 17, 23, 0.70);
       color: #e6edf3;
       border: 1px solid #30363d;
       border-radius: 10px;
@@ -374,13 +374,13 @@
 </div>
 
 <!-- Floating Show Button (Always available when panel is hidden) -->
-<button id="toggle-ui-btn" class="ui-button">🧭 Explorer Panel</button>
-<button id="inventory-btn" class="ui-button">🎒 Backpack</button>
+<button id="toggle-ui-btn" class="ui-button">Explorer Panel</button>
+<button id="inventory-btn" class="ui-button">Backpack</button>
 
 <div id="inventory-panel">
   <button id="close-inventory-btn">&times;</button>
 
-  <h3>🎒 Backpack</h3>
+  <h3>Backpack</h3>
   <div id="inv-gold-display">💰 Gold: <span id="inv-gold-amount">0</span></div>
   <div id="inv-items-display">Items: <span id="inv-items-list">Empty</span></div>
 </div>
@@ -1125,37 +1125,32 @@
       
       activeGoldNodes.push(goldNode);
   
-      goldContainer.addEventListener('click', (e) => {
-          e.stopPropagation();
-          closeBackpackIfOpen(false);
-          ensureUIPanelVisible();
-      
-          const container = document.getElementById('plot-info');
-      
-          startLiveDistanceUpdates("coin", goldNode, (distRounded) => {
-              const dist = Number(distRounded);
-              const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
-      
-              if (dist > 100) {
-                  container.innerHTML = `
-                      <b>${valueLabel}:</b> +${coinValue} Gold<br/>
-                      <b>Distance:</b> ${distRounded} ft away<br/>
-                      <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
-                  `;
-                  return;
-              }
-      
-              container.innerHTML = `
-                  <b>${valueLabel}:</b> +${coinValue} Gold<br/>
-                  <b>Distance:</b> ${distRounded} ft (In Range)<br/>
-                  <button id="pickup-coin-btn" class="btn buy-btn" style="margin-top:6px;">Collect Coin</button>
-              `;
-      
-              document.getElementById('pickup-coin-btn').addEventListener('click', () => {
-                  collectCoin(goldNode);
-              });
-          });
-      });
+	  goldContainer.addEventListener('click', (e) => {
+	  	e.stopPropagation();
+	  	closeBackpackIfOpen(false);
+	  	ensureUIPanelVisible();
+	  
+	  	const container = document.getElementById('plot-info');
+	  
+	  	startLiveDistanceUpdates("coin", goldNode, (distRounded) => {
+	  		const dist = Number(distRounded);
+	  		const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+	  
+	  		// ⭐ AUTO-COLLECT LOGIC
+	  		if (dist <= 100) {
+	  			collectCoin(goldNode);     // auto collect
+	  			stopLiveDistanceUpdates(); // stop interval
+	  			return;
+	  		}
+	  
+	  		// ⭐ Otherwise show distance
+	  		container.innerHTML = `
+	  			<b>${valueLabel}:</b> +${coinValue} Gold<br/>
+	  			<b>Distance:</b> ${distRounded} ft away<br/>
+	  			<small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
+	  		`;
+	  	});
+	  });
   
       break;
     }
