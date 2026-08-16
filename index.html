@@ -1045,6 +1045,58 @@
       `;
     }
   }
+  
+  function collectCoin(node) {
+      if (node.isCollecting) return;
+      node.isCollecting = true;
+  
+      // Play sound
+      const sound = coinAudio.cloneNode();
+      sound.volume = 0.6;
+      sound.play().catch(() => {});
+  
+      // Magnet animation
+      const startLng = node.lng;
+      const startLat = node.lat;
+      const startTime = performance.now();
+      const duration = 350;
+  
+      function pullAnimation(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const ease = progress * progress;
+  
+          const currentLng = startLng + (userLng - startLng) * ease;
+          const currentLat = startLat + (userLat - startLat) * ease;
+  
+          node.marker.setLngLat([currentLng, currentLat]);
+  
+          const markerElem = node.marker.getElement();
+          if (markerElem) markerElem.style.opacity = (1 - ease).toString();
+  
+          if (progress < 1) {
+              requestAnimationFrame(pullAnimation);
+          } else {
+              // Finalize pickup
+              playerGold += node.value;
+              localStorage.setItem('rpg_player_gold', playerGold);
+              updateGoldDisplay();
+  
+              const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
+              document.getElementById('status').innerText =
+                  `${rarityText} Picked up +${node.value} Gold!`;
+  
+              node.marker.remove();
+  
+              const idx = activeGoldNodes.indexOf(node);
+              if (idx !== -1) activeGoldNodes.splice(idx, 1);
+  
+              renderSelectedPlotCard();
+          }
+      }
+  
+      requestAnimationFrame(pullAnimation);
+  }
 
   function cleanupDistantCoins() {
     if (!userLat || !userLng) return;
@@ -1127,33 +1179,41 @@
       
       activeGoldNodes.push(goldNode);
   
-	  goldContainer.addEventListener('click', (e) => {
-	  	e.stopPropagation();
-		clearSelectedPlot();
-	  	closeBackpackIfOpen(false);
-	  	ensureUIPanelVisible();
-	  
-	  	const container = document.getElementById('plot-info');
-	  
-	  	startLiveDistanceUpdates("coin", goldNode, (distRounded) => {
-	  		const dist = Number(distRounded);
-	  		const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
-	  
-	  		// ⭐ AUTO-COLLECT LOGIC
-	  		if (dist <= 100) {
-	  			collectCoin(goldNode);     // auto collect
-	  			stopLiveDistanceUpdates(); // stop interval
-	  			return;
-	  		}
-	  
-	  		// ⭐ Otherwise show distance
-	  		container.innerHTML = `
-	  			<b>${valueLabel}:</b> +${coinValue} Gold<br/>
-	  			<b>Distance:</b> ${distRounded} ft away<br/>
-	  			<small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
-	  		`;
-	  	});
-	  });
+      goldContainer.addEventListener('click', (e) => {
+          e.stopPropagation();
+      
+          clearSelectedPlot();
+          closeBackpackIfOpen(false);
+      
+          const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
+      
+          // ⭐ Auto-collect BEFORE opening UI
+          if (dist <= 100) {
+              collectCoin(goldNode);
+              return;
+          }
+      
+          ensureUIPanelVisible();
+      
+          const container = document.getElementById('plot-info');
+      
+          startLiveDistanceUpdates("coin", goldNode, (distRounded) => {
+              const distNow = Number(distRounded);
+              const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+      
+              if (distNow <= 100) {
+                  collectCoin(goldNode);
+                  stopLiveDistanceUpdates();
+                  return;
+              }
+      
+              container.innerHTML = `
+                  <b>${valueLabel}:</b> +${coinValue} Gold<br/>
+                  <b>Distance:</b> ${distRounded} ft away<br/>
+                  <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
+              `;
+          });
+      });
   
       break;
     }
@@ -1168,72 +1228,18 @@
   }
 
   function checkCoinProximity() {
-    for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
-      const node = activeGoldNodes[i];
+      for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
+          const node = activeGoldNodes[i];
   
-      // Skip coins currently in the middle of being pulled
-      if (node.isCollecting) continue;
+          // Skip coins currently in the middle of being pulled
+          if (node.isCollecting) continue;
   
-      const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
+          const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
   
-      if (dist <= PICKUP_RADIUS_FEET) {
-        node.isCollecting = true; // Mark as collecting so it doesn't trigger twice
-  
-        // 1. Play Sound Effect (cloned so rapid pickups don't cut each other off)
-        const sound = coinAudio.cloneNode();
-        sound.volume = 0.6; // Adjust volume (0.0 to 1.0)
-        sound.play().catch(() => {}); // .catch prevents browser autoplay warnings
-  
-        // 2. Animate coin sliding towards player ("Magnet Pull")
-        const startLng = node.lng;
-        const startLat = node.lat;
-        const startTime = performance.now();
-        const duration = 350; // Animation duration in milliseconds
-  
-        function pullAnimation(now) {
-          const elapsed = now - startTime;
-          const progress = Math.min(elapsed / duration, 1);
-          
-          // Acceleration curve (ease-in) for a snappy magnetic feel
-          const ease = progress * progress;
-  
-          // Slide toward player's current location
-          const currentLng = startLng + (userLng - startLng) * ease;
-          const currentLat = startLat + (userLat - startLat) * ease;
-  
-          node.marker.setLngLat([currentLng, currentLat]);
-  
-          // Fade out as it gets closer
-          const markerElem = node.marker.getElement();
-          if (markerElem) {
-            markerElem.style.opacity = (1 - ease).toString();
+          if (dist <= PICKUP_RADIUS_FEET) {
+              collectCoin(node);   // ⭐ unified auto-collect
           }
-  
-          if (progress < 1) {
-            requestAnimationFrame(pullAnimation);
-          } else {
-            // 3. Finalize Pickup when coin arrives at player
-            playerGold += node.value;
-            localStorage.setItem('rpg_player_gold', playerGold);
-            updateGoldDisplay();
-  
-            const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
-            document.getElementById('status').innerText = `${rarityText} Picked up +${node.value} Gold!`;
-  
-            node.marker.remove();
-  
-            // Safely remove from active array
-            const currentIndex = activeGoldNodes.indexOf(node);
-            if (currentIndex !== -1) {
-              activeGoldNodes.splice(currentIndex, 1);
-            }
-            renderSelectedPlotCard();
-          }
-        }
-  
-        requestAnimationFrame(pullAnimation);
       }
-    }
   }
 
   function createPlotFeature(gridX, gridY) {
