@@ -87,18 +87,7 @@
       top: 12px;
       left: 12px;
       z-index: 999;
-      width: 150px;
-      max-width: calc(100vw - 24px);
-      display: none; /* Hidden until game starts */
-      background: rgba(13, 17, 23, 0.92);
-      color: #e6edf3;
-      border: 1px solid #30363d;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      display: none;
     }
     
     #toggle-ui-btn:hover {
@@ -107,8 +96,6 @@
     }	
 	
     #ui-panel h3 { margin: 0 0 4px 0; font-size: 18px; }
-    #gold-display { font-size: 16px; font-weight: bold; color: #facc15; margin-bottom: 2px; }
-    #inventory-display { font-size: 13px; color: #a855f7; margin-bottom: 6px; font-weight: 500; }
     #status { font-size: 13px; color: #38bdf8; margin-bottom: 8px; }
     
     #plot-card {
@@ -117,6 +104,74 @@
       border-top: 1px solid #30363d;
       font-size: 14px;
       line-height: 1.4;
+    }
+	
+    #inventory-btn {
+      position: absolute;
+      top: 80px;
+      left: 12px;
+      z-index: 999;
+    }
+    
+    #inventory-panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      width: 300px;
+      max-width: calc(100vw - 24px);
+      background: rgba(13, 17, 23, 0.92);
+      color: #e6edf3;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: 1px solid #30363d;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      display: none;
+    }
+	
+    #close-inventory-btn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+    
+    #close-inventory-btn:hover {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+    }
+	
+	#inventory-panel h3 {
+	margin: 0 0 10px 0;
+	padding-bottom: 6px;
+	border-bottom: 1px solid #30363d;
+	}
+	
+    .ui-button {
+      width: 180px;        /* wider */
+      height: 46px;        /* consistent height */
+      padding: 10px 14px;  /* same padding */
+      background: rgba(13, 17, 23, 0.92);
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap; /* prevents word wrap */
     }
 
     .btn {
@@ -318,15 +373,22 @@
 </div>
 
 <!-- Floating Show Button (Always available when panel is hidden) -->
-<button id="toggle-ui-btn" class="btn">🧭 Explorer Panel</button>
+<button id="toggle-ui-btn" class="ui-button">🧭 Explorer Panel</button>
+<button id="inventory-btn" class="ui-button">🎒 Backpack</button>
+
+<div id="inventory-panel">
+  <button id="close-inventory-btn">&times;</button>
+
+  <h3>🎒 Backpack</h3>
+  <div id="inv-gold-display">💰 Gold: <span id="inv-gold-amount">0</span></div>
+  <div id="inv-items-display">Items: <span id="inv-items-list">Empty</span></div>
+</div>
 
 <!-- Main Game UI Panel -->
 <div id="ui-panel">
   <!-- Close Button -->
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
-  <div id="gold-display">💰 Gold: <span id="gold-amount">0</span></div>
-  <div id="inventory-display">🎒 Inventory: <span id="inventory-list">Empty</span></div>
   <div id="status">GPS Active</div>
   <button id="autocenter-button" class="btn autocenter-on">🎯 Auto-Center: ON</button>
   
@@ -596,11 +658,9 @@ function spawnTrees() {
         activeTreeNodes.push(treeNode);
 
         // Prevent map click-through
-        ['click', 'touchstart', 'mousedown'].forEach(eventType => {
-          treeContainer.addEventListener(eventType, (e) => {
-            e.stopPropagation();
-          });
-        });
+		treeContainer.addEventListener('click', (e) => {
+		  e.stopPropagation();
+		});
 
         // Open tree card
         treeContainer.addEventListener('click', () => {
@@ -1174,15 +1234,19 @@ function spawnTrees() {
   }
 
   function updateGoldDisplay() {
-    document.getElementById('gold-amount').innerText = playerGold;
+      // Inventory Panel
+      document.getElementById('inv-gold-amount').innerText = playerGold;
   }
 
   function updateInventoryDisplay() {
-    const items = [];
-    if (playerInventory.has('axe')) items.push('🪓 Axe');
-    if (playerWood > 0) items.push(`🪵 Wood x${playerWood}`);
-    
-    document.getElementById('inventory-list').innerText = items.length > 0 ? items.join(', ') : 'Empty';
+      const items = [];
+      if (playerInventory.has('axe')) items.push('🪓 Axe');
+      if (playerWood > 0) items.push(`🪵 Wood x${playerWood}`);
+  
+      const listText = items.length > 0 ? items.join(', ') : 'Empty';
+  
+      // Update Inventory Panel
+      document.getElementById('inv-items-list').innerText = listText;
   }
 
   function renderSelectedPlotCard() {
@@ -1309,6 +1373,14 @@ function ensureUIPanelVisible() {
   document.getElementById('toggle-ui-btn').addEventListener('click', () => {
     document.getElementById('ui-panel').style.display = 'block';
     document.getElementById('toggle-ui-btn').style.display = 'none';
+  });
+  
+  document.getElementById('inventory-btn').addEventListener('click', () => {
+    document.getElementById('inventory-panel').style.display = 'block';
+  });
+
+  document.getElementById('close-inventory-btn').addEventListener('click', () => {
+    document.getElementById('inventory-panel').style.display = 'none';
   });
 
   geolocate.on('geolocate', (e) => {
