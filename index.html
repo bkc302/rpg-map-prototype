@@ -443,6 +443,9 @@
   let gameStarted = false;
   let autoCenterEnabled = true;
   let compassActive = false;
+  
+  let activeTarget = null;        // { type: 'tree' | 'npc' | 'coin', node: {...} }
+  let distanceInterval = null;
 
   // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
@@ -564,6 +567,35 @@
     
     return distanceMeters * 3.28084; // Convert meters to feet
   }
+  
+  function startLiveDistanceUpdates(targetType, targetNode, renderFn) {
+      // Stop any previous interval
+      if (distanceInterval) clearInterval(distanceInterval);
+  
+      activeTarget = { type: targetType, node: targetNode };
+  
+      function update() {
+          if (!userLat || !userLng) return;
+  
+          const dist = getDistanceFeet(
+              userLat,
+              userLng,
+              targetNode.lat,
+              targetNode.lng
+          ).toFixed(0);
+  
+          renderFn(dist);  // Call the specific renderer (tree, npc, coin)
+      }
+  
+      update(); // Run immediately
+      distanceInterval = setInterval(update, 1000); // Update every second
+  }
+  
+  function stopLiveDistanceUpdates() {
+      if (distanceInterval) clearInterval(distanceInterval);
+      distanceInterval = null;
+      activeTarget = null;
+  }
 
   // Clears active tree markers
   function clearTrees() {
@@ -580,136 +612,135 @@
   
 
   // Spawns trees deterministically across the 9x9 grid, respecting chopped respawn timers
-function spawnTrees() {
-  if (!userLat || !userLng) return;
-
-  const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
-  const newCenterKey = `${centerGridY}_${centerGridX}`;
-
-  if (currentGridCenterKey === newCenterKey) {
-    updateTreeVisibility();
-    return;
-  }
-
-  currentGridCenterKey = newCenterKey;
-  clearTrees();
-
-  const gridRadius = 4;
-  const TREE_DENSITY_THRESHOLD = 0.20;
-  const isVisible = map.getZoom() >= 17.5;
-  const now = Date.now();
-
-  for (let x = -gridRadius; x <= gridRadius; x++) {
-    for (let y = -gridRadius; y <= gridRadius; y++) {
-
-      const tileGridX = centerGridX + x;
-      const tileGridY = centerGridY + y;
-      const tileKey = `${tileGridY}_${tileGridX}`;
-
-      // Determine if tree should be stump or full tree
-      let isChopped = false;
-
-      if (choppedTrees[tileKey]) {
-        if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
-          isChopped = true; // stump should appear
-        } else {
-          // Respawn tree after cooldown
-          delete choppedTrees[tileKey];
-          localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+  function spawnTrees() {
+    if (!userLat || !userLng) return;
+  
+    const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
+    const newCenterKey = `${centerGridY}_${centerGridX}`;
+  
+    if (currentGridCenterKey === newCenterKey) {
+      updateTreeVisibility();
+      return;
+    }
+  
+    currentGridCenterKey = newCenterKey;
+    clearTrees();
+  
+    const gridRadius = 4;
+    const TREE_DENSITY_THRESHOLD = 0.20;
+    const isVisible = map.getZoom() >= 17.5;
+    const now = Date.now();
+  
+    for (let x = -gridRadius; x <= gridRadius; x++) {
+      for (let y = -gridRadius; y <= gridRadius; y++) {
+  
+        const tileGridX = centerGridX + x;
+        const tileGridY = centerGridY + y;
+        const tileKey = `${tileGridY}_${tileGridX}`;
+  
+        // Determine if tree should be stump or full tree
+        let isChopped = false;
+  
+        if (choppedTrees[tileKey]) {
+          if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
+            isChopped = true; // stump should appear
+          } else {
+            // Respawn tree after cooldown
+            delete choppedTrees[tileKey];
+            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+          }
         }
-      }
-
-      const tileSeed = getTileRandom(tileGridX, tileGridY);
-
-      if (tileSeed < TREE_DENSITY_THRESHOLD) {
-
-        const treeLat = (tileGridY + 0.50) * LAT_GRID_SIZE_DEG;
-        const treeLng = (tileGridX + 0.50) * LNG_GRID_SIZE_DEG;
-
-        const treeContainer = document.createElement('div');
-        treeContainer.className = 'tree-marker-container';
-        treeContainer.style.display = isVisible ? 'flex' : 'none';
-
-        const treeImg = document.createElement('img');
-        treeImg.className = 'tree-marker-icon';
-
-        // Use isChopped flag to decide image
-        treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
-
-        treeContainer.appendChild(treeImg);
-
-        const marker = new maplibregl.Marker({
-          element: treeContainer,
-          anchor: 'center'
-        }).setLngLat([treeLng, treeLat]).addTo(map);
-		
-		// Disable clicking on stump
-        if (isChopped) {
-            treeContainer.style.pointerEvents = "none";
+  
+        const tileSeed = getTileRandom(tileGridX, tileGridY);
+  
+        if (tileSeed < TREE_DENSITY_THRESHOLD) {
+  
+          const treeLat = (tileGridY + 0.50) * LAT_GRID_SIZE_DEG;
+          const treeLng = (tileGridX + 0.50) * LNG_GRID_SIZE_DEG;
+  
+          const treeContainer = document.createElement('div');
+          treeContainer.className = 'tree-marker-container';
+          treeContainer.style.display = isVisible ? 'flex' : 'none';
+  
+          const treeImg = document.createElement('img');
+          treeImg.className = 'tree-marker-icon';
+  
+          // Use isChopped flag to decide image
+          treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
+  
+          treeContainer.appendChild(treeImg);
+  
+          const marker = new maplibregl.Marker({
+            element: treeContainer,
+            anchor: 'center'
+          }).setLngLat([treeLng, treeLat]).addTo(map);
+  		
+  		// Disable clicking on stump
+          if (isChopped) {
+              treeContainer.style.pointerEvents = "none";
+          }
+  
+          const treeNode = {
+            tileKey: tileKey,
+            lat: treeLat,
+            lng: treeLng,
+            marker: marker,
+            element: treeContainer
+          };
+  
+          activeTreeNodes.push(treeNode);
+  
+          // Prevent map click-through
+  		treeContainer.addEventListener('click', (e) => {
+  		  e.stopPropagation();
+  		});
+  
+          // Open tree card
+          treeContainer.addEventListener('click', () => {
+  		  closeBackpackIfOpen(false);
+            ensureUIPanelVisible();
+            renderTreeCard(treeNode);
+          });
         }
-
-        const treeNode = {
-          tileKey: tileKey,
-          lat: treeLat,
-          lng: treeLng,
-          marker: marker,
-          element: treeContainer
-        };
-
-        activeTreeNodes.push(treeNode);
-
-        // Prevent map click-through
-		treeContainer.addEventListener('click', (e) => {
-		  e.stopPropagation();
-		});
-
-        // Open tree card
-        treeContainer.addEventListener('click', () => {
-		  closeBackpackIfOpen(false);
-          ensureUIPanelVisible();
-          renderTreeCard(treeNode);
-        });
       }
     }
   }
-}
   
   function renderTreeCard(treeNode) {
-    if (!userLat || !userLng) return;
-
-    const dist = getDistanceFeet(userLat, userLng, treeNode.lat, treeNode.lng).toFixed(0);
-    const inRange = dist <= TREE_CUT_RADIUS_FEET;
-    const hasAxe = playerInventory.has('axe');
-    const container = document.getElementById('plot-info');
-
-    if (!hasAxe) {
-      container.innerHTML = `
-        <b>🌳 Tree:</b><br/>
-        <b>Distance:</b> ${dist} ft away<br/>
-        <small style="font-size:14px; color:#f7f7f7;">⚠️ You need an Axe to chop this tree!</small>
-      `;
-      return;
-    }
-
-    if (!inRange) {
-      container.innerHTML = `
-        <b>🌳 Tree:</b><br/>
-        <b>Distance:</b> ${dist} ft away<br/>
-        <small style="font-size:14px; color:#f7f7f7;">Walk within 100 ft to chop down!</small>
-      `;
-      return;
-    }
-
-    container.innerHTML = `
-      <b>🌳 Tree:</b><br/>
-      <b>Distance:</b> ${dist} ft away (In Range)<br/>
-      <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
-    `;
-
-    document.getElementById('chop-tree-btn').addEventListener('click', () => {
-      startChopCountdown(treeNode);
-    });
-
+      const container = document.getElementById('plot-info');
+  
+      startLiveDistanceUpdates("tree", treeNode, (dist) => {
+          const inRange = dist <= TREE_CUT_RADIUS_FEET;
+          const hasAxe = playerInventory.has('axe');
+  
+          if (!hasAxe) {
+              container.innerHTML = `
+                  <b>🌳 Tree:</b><br/>
+                  <b>Distance:</b> ${dist} ft away<br/>
+                  <small style="font-size:14px; color:#f7f7f7;">⚠️ You need an Axe to chop this tree!</small>
+              `;
+              return;
+          }
+  
+          if (!inRange) {
+              container.innerHTML = `
+                  <b>🌳 Tree:</b><br/>
+                  <b>Distance:</b> ${dist} ft away<br/>
+                  <small style="font-size:14px; color:#f7f7f7;">Walk within 100 ft to chop down!</small>
+              `;
+              return;
+          }
+  
+          container.innerHTML = `
+              <b>🌳 Tree:</b><br/>
+              <b>Distance:</b> ${dist} ft away (In Range)<br/>
+              <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
+          `;
+  
+          document.getElementById('chop-tree-btn').addEventListener('click', () => {
+              startChopCountdown(treeNode);
+          });
+      });
   }
 
   function chopTree(treeNode) {
@@ -948,41 +979,40 @@ function spawnTrees() {
   }
 
   function renderNPCCard() {
-    // If Pete is permanently disabled, do nothing at all
-    if (npcDisabled) return;
-
-    if (!npcNode || !userLat || !userLng) return;
+      if (npcDisabled) return;
+      if (!npcNode || !userLat || !userLng) return;
   
-    const dist = getDistanceFeet(userLat, userLng, npcNode.lat, npcNode.lng);
-    const distRounded = dist.toFixed(0);
-    const inRange = dist <= NPC_TALK_RADIUS_FEET;
-    const container = document.getElementById('plot-info');
+      const container = document.getElementById('plot-info');
   
-    if (!inRange) {
-      container.innerHTML = `
-        <b>Timber Pete:</b><br/>
-        <b>Distance:</b> ${distRounded} ft away<br/>
-        <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
-      `;
-      return;
-    }
-
-    // Player does NOT have axe → show purchase UI
-    const canAfford = playerGold >= AXE_PRICE;
-    const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
-    const disabledAttr = canAfford ? '' : 'disabled';
+      startLiveDistanceUpdates("npc", npcNode, (distRounded) => {
+          const dist = Number(distRounded);
+          const inRange = dist <= NPC_TALK_RADIUS_FEET;
   
-    container.innerHTML = `
-      <b>Timber Pete:</b><br/>
-      <i>"Need something for chopping wood?"</i><br/>
-      <b>Item:</b> 🪓 Axe<br/>
-      <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
-      <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
-    `;
+          if (!inRange) {
+              container.innerHTML = `
+                  <b>Timber Pete:</b><br/>
+                  <b>Distance:</b> ${distRounded} ft away<br/>
+                  <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
+              `;
+              return;
+          }
   
-    if (canAfford) {
-      document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
-    }
+          const canAfford = playerGold >= AXE_PRICE;
+          const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
+          const disabledAttr = canAfford ? '' : 'disabled';
+  
+          container.innerHTML = `
+              <b>Timber Pete:</b><br/>
+              <i>"Need something for chopping wood?"</i><br/>
+              <b>Item:</b> 🪓 Axe<br/>
+              <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
+              <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
+          `;
+  
+          if (canAfford) {
+              document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
+          }
+      });
   }
 
   function buyAxe() {
@@ -1096,17 +1126,35 @@ function spawnTrees() {
       activeGoldNodes.push(goldNode);
   
       goldContainer.addEventListener('click', (e) => {
-        e.stopPropagation();
-		closeBackpackIfOpen(false);
-        ensureUIPanelVisible();
-        const dist = getDistanceFeet(userLat, userLng, goldLat, goldLng).toFixed(0);
-        const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+          e.stopPropagation();
+          closeBackpackIfOpen(false);
+          ensureUIPanelVisible();
       
-        document.getElementById('plot-info').innerHTML = `
-          <b>${valueLabel}:</b> +${coinValue} Gold<br/>
-          <b>Distance:</b> ${dist} ft away<br/>
-          <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
-        `;
+          const container = document.getElementById('plot-info');
+      
+          startLiveDistanceUpdates("coin", goldNode, (distRounded) => {
+              const dist = Number(distRounded);
+              const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
+      
+              if (dist > 100) {
+                  container.innerHTML = `
+                      <b>${valueLabel}:</b> +${coinValue} Gold<br/>
+                      <b>Distance:</b> ${distRounded} ft away<br/>
+                      <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
+                  `;
+                  return;
+              }
+      
+              container.innerHTML = `
+                  <b>${valueLabel}:</b> +${coinValue} Gold<br/>
+                  <b>Distance:</b> ${distRounded} ft (In Range)<br/>
+                  <button id="pickup-coin-btn" class="btn buy-btn" style="margin-top:6px;">Collect Coin</button>
+              `;
+      
+              document.getElementById('pickup-coin-btn').addEventListener('click', () => {
+                  collectCoin(goldNode);
+              });
+          });
       });
   
       break;
@@ -1385,28 +1433,37 @@ function spawnTrees() {
   
   // Toggle Panel Visibility Listeners
   document.getElementById('close-ui-btn').addEventListener('click', () => {
-    document.getElementById('ui-panel').style.display = 'none';
-    document.getElementById('toggle-ui-btn').style.display = 'block';
-	document.getElementById('inventory-btn').style.display = 'block';
+      document.getElementById('ui-panel').style.display = 'none';
+      document.getElementById('toggle-ui-btn').style.display = 'block';
+      document.getElementById('inventory-btn').style.display = 'block';
+  
+      stopLiveDistanceUpdates();
   });
   
   document.getElementById('toggle-ui-btn').addEventListener('click', () => {
-    document.getElementById('ui-panel').style.display = 'block';
-    document.getElementById('toggle-ui-btn').style.display = 'none';
-	document.getElementById('inventory-btn').style.display = 'none';
+      document.getElementById('ui-panel').style.display = 'block';
+      document.getElementById('toggle-ui-btn').style.display = 'none';
+      document.getElementById('inventory-btn').style.display = 'none';
+  
+      stopLiveDistanceUpdates();
   });
   
   document.getElementById('inventory-btn').addEventListener('click', () => {
-    document.getElementById('inventory-panel').style.display = 'block';
-    document.getElementById('inventory-btn').style.display = 'none';
-    document.getElementById('toggle-ui-btn').style.display = 'none';
+      document.getElementById('inventory-panel').style.display = 'block';
+      document.getElementById('inventory-btn').style.display = 'none';
+      document.getElementById('toggle-ui-btn').style.display = 'none';
+  
+      stopLiveDistanceUpdates();
+  });
+  
+  document.getElementById('close-inventory-btn').addEventListener('click', () => {
+      document.getElementById('inventory-panel').style.display = 'none';
+      document.getElementById('inventory-btn').style.display = 'block';
+      document.getElementById('toggle-ui-btn').style.display = 'block';
+  
+      stopLiveDistanceUpdates();
   });
 
-  document.getElementById('close-inventory-btn').addEventListener('click', () => {
-    document.getElementById('inventory-panel').style.display = 'none';
-	document.getElementById('inventory-btn').style.display = 'block';
-	document.getElementById('toggle-ui-btn').style.display = 'block';
-  });
 
   geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
@@ -1559,6 +1616,7 @@ function spawnTrees() {
 
     map.on('click', 'plots-fill', (e) => {
       if (e.features.length > 0) {
+	    stopLiveDistanceUpdates();
 	    closeBackpackIfOpen(false);
         selectedPlotId = e.features[0].properties.plotId;
         ensureUIPanelVisible();
