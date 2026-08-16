@@ -698,6 +698,7 @@
           // Open tree card
           treeContainer.addEventListener('click', () => {
   		  closeBackpackIfOpen(false);
+		    clearSelectedPlot();
             ensureUIPanelVisible();
             renderTreeCard(treeNode);
           });
@@ -918,6 +919,7 @@
 
     npcContainer.addEventListener('click', (e) => {
       e.stopPropagation();
+	  clearSelectedPlot();
 	  closeBackpackIfOpen(false);
       ensureUIPanelVisible();
       renderNPCCard();
@@ -1127,6 +1129,7 @@
   
 	  goldContainer.addEventListener('click', (e) => {
 	  	e.stopPropagation();
+		clearSelectedPlot();
 	  	closeBackpackIfOpen(false);
 	  	ensureUIPanelVisible();
 	  
@@ -1375,6 +1378,11 @@
           }
       }
   }
+  
+  function clearSelectedPlot() {
+      selectedPlotId = null;
+      refreshMapGrid();   // rebuilds features → removes red outline
+  }
 
   // UI & GEOLOCATION EVENT LISTENERS
    document.getElementById('dev-reset-btn').addEventListener('click', () => {
@@ -1565,6 +1573,7 @@
       paint: { 'fill-color': '#000000', 'fill-opacity': 0 }
     });
 
+	//MAIN PLOT/GRID OUTLINES
     map.addLayer({
       id: 'plots-outline',
       type: 'line',
@@ -1573,6 +1582,7 @@
       paint: { 'line-color': '#1e293b', 'line-width': 2, 'line-opacity': 0.7 }
     });
 
+    //RED OUTLINE FOR SELECTED PLOT
     map.addLayer({
       id: 'plots-selected-outline',
       type: 'line',
@@ -1581,6 +1591,7 @@
       paint: { 'line-color': '#ef4444', 'line-width': 4, 'line-opacity': 1.0 }
     });
 
+	//YELLOW OUTLINE FOR CLAIMED/OWNED PLOTS
     map.addLayer({
       id: 'plots-claimed-outline',
       type: 'line',
