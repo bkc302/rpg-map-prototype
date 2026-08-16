@@ -825,6 +825,7 @@ function spawnTrees() {
 
     npcContainer.addEventListener('click', (e) => {
       e.stopPropagation();
+      ensureUIPanelVisible();
       renderNPCCard();
     });
   }
@@ -1033,6 +1034,7 @@ function spawnTrees() {
   
       goldContainer.addEventListener('click', (e) => {
         e.stopPropagation();
+        ensureUIPanelVisible();
         const dist = getDistanceFeet(userLat, userLng, goldLat, goldLng).toFixed(0);
         const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
       
@@ -1221,6 +1223,7 @@ function spawnTrees() {
       localStorage.setItem('rpg_claimed_plots', JSON.stringify(Array.from(claimedPlotIds)));
   
       updateGoldDisplay();
+      ensureUIPanelVisible();
       renderSelectedPlotCard();
       refreshMapGrid();
     }
@@ -1459,6 +1462,7 @@ function ensureUIPanelVisible() {
     map.on('click', 'plots-fill', (e) => {
       if (e.features.length > 0) {
         selectedPlotId = e.features[0].properties.plotId;
+        ensureUIPanelVisible();
         renderSelectedPlotCard();
         refreshMapGrid();
       }
