@@ -475,13 +475,39 @@
   const MAX_GOLD_NODES = 30;
   const PICKUP_RADIUS_FEET = 100;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
+   
+  const NPC_DEFS = {
+      timberPete: {
+          id: "timberPete",
+          name: "Timber Pete",
+          img: "pete.png",
+          talkRadius: 100,
+          spawnRadius: 4,
+          offsetX: 0.25, // 0.50 is centered
+          offsetY: 0.25,
+          tradeItem: "axe",
+          tradeType: "gold",
+          price: 20,
+          disabledKey: "rpg_npc_disabled_pete"
+      },
   
-  // NPC Merchant State
-  let npcNode = null;
-  const NPC_TALK_RADIUS_FEET = 100;
+      minerGus: {
+          id: "minerGus",
+          name: "Miner Gus",
+          img: "gus.png",
+          talkRadius: 100,
+          spawnRadius: 4,
+          offsetX: 0.75,
+          offsetY: 0.25,
+          tradeItem: "mining pick",
+          tradeType: "wood",
+          price: 20,
+          disabledKey: "rpg_npc_disabled_gus"
+      }
+  };
 
-  const savedNpcDisabled = localStorage.getItem('rpg_npc_disabled');
-  let npcDisabled = savedNpcDisabled === 'true';
+  // NPC Merchant State
+  let npcNodes = {}; // { npcId: { lat, lng, marker } }
 
   // Gold pickup sound effect
   const coinAudio = new Audio('coin.mp3');
@@ -510,7 +536,8 @@
     container: 'map',
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [0, 0],
-    zoom: 2
+    zoom: 2,
+	maxZoom: 18
   });
 
   const geolocate = new maplibregl.GeolocateControl({
@@ -872,178 +899,213 @@
     chopTree(treeNode);
   }
   
-  // Spawns Timber Pete inside the player's 9x9 grid
-  function spawnNPC() {
-	if (npcDisabled) return;
-    if (!userLat || !userLng) return;
+  function spawnNPC(def) {
+      const disabled = localStorage.getItem(def.disabledKey) === "true";
+      if (disabled) return;
+      if (!userLat || !userLng) return;
+  
+      // Remove old marker if exists
+      if (npcNodes[def.id]?.marker) {
+          npcNodes[def.id].marker.remove();
+      }
+  
+      const { gridX, gridY } = latLngToGrid(userLat, userLng);
+      const radius = def.spawnRadius;
+  
+      let offsetX = 0, offsetY = 0;
+      while (offsetX === 0 && offsetY === 0) {
+          offsetX = Math.floor(Math.random() * (radius * 2 + 1)) - radius;
+          offsetY = Math.floor(Math.random() * (radius * 2 + 1)) - radius;
+      }
+  
+      const targetGridX = gridX + offsetX;
+      const targetGridY = gridY + offsetY;
+  
+      const npcLat = (targetGridY + def.offsetY) * LAT_GRID_SIZE_DEG;
+      const npcLng = (targetGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
+  
+      const container = document.createElement("div");
+      container.className = "npc-marker-container";
+  
+      const img = document.createElement("img");
+      img.className = "npc-marker-icon";
+      img.src = def.img;
+      container.appendChild(img);
+  
+      const marker = new maplibregl.Marker({ element: container, anchor: "center" })
+          .setLngLat([npcLng, npcLat])
+          .addTo(map);
+  
+      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker };
+  
+      container.addEventListener("click", (e) => {
+          e.stopPropagation();
+          clearSelectedPlot();
+          closeBackpackIfOpen(false);
+          ensureUIPanelVisible();
+          renderNPCCard(def);
+      });
+  }
 
-    if (npcNode && npcNode.marker) {
-      npcNode.marker.remove();
-      npcNode = null;
-    }
-
-    const gridRadius = 4;
-    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
-
-    let offsetX = 0;
-    let offsetY = 0;
-    while (offsetX === 0 && offsetY === 0) {
-      offsetX = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
-      offsetY = Math.floor(Math.random() * (gridRadius * 2 + 1)) - gridRadius;
-    }
-
-    const targetGridX = playerGridX + offsetX;
-    const targetGridY = playerGridY + offsetY;
-
-    const npcLat = (targetGridY + 0.50) * LAT_GRID_SIZE_DEG;
-    const npcLng = (targetGridX + 0.50) * LNG_GRID_SIZE_DEG;
-
-    const npcContainer = document.createElement('div');
-    npcContainer.className = 'npc-marker-container';
-
-    const npcImg = document.createElement('img');
-    npcImg.className = 'npc-marker-icon';
-    npcImg.src = 'npc.png';
-    npcContainer.appendChild(npcImg);
-
-    const marker = new maplibregl.Marker({
-      element: npcContainer,
-      anchor: 'center'
-    }).setLngLat([npcLng, npcLat]).addTo(map);
-
-    npcNode = {
-      lat: npcLat,
-      lng: npcLng,
-      marker: marker
-    };
-
-    npcContainer.addEventListener('click', (e) => {
-      e.stopPropagation();
-	  clearSelectedPlot();
-	  closeBackpackIfOpen(false);
-      ensureUIPanelVisible();
-      renderNPCCard();
-    });
+  function moveNPC(def) {
+      const node = npcNodes[def.id];
+      if (!node || !userLat || !userLng) return;
+  
+      const { gridX, gridY } = latLngToGrid(userLat, userLng);
+      const radius = def.spawnRadius;
+  
+      const currentGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
+      const currentGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
+  
+      const offsetX = Math.floor(Math.random() * 3) - 1;
+      const offsetY = Math.floor(Math.random() * 3) - 1;
+  
+      let newGridX = Math.max(gridX - radius, Math.min(gridX + radius, currentGridX + offsetX));
+      let newGridY = Math.max(gridY - radius, Math.min(gridY + radius, currentGridY + offsetY));
+  
+      node.lat = (newGridY + def.offsetY) * LAT_GRID_SIZE_DEG;
+      node.lng = (newGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
+  
+      node.marker.setLngLat([node.lng, node.lat]);
+  
+      const infoElem = document.getElementById("plot-info");
+      if (infoElem && infoElem.innerText.includes(def.name)) {
+          renderNPCCard(def);
+      }
   }
   
-  function moveNPC() {
-    if (npcDisabled) return;
-    if (!npcNode || !userLat || !userLng) return;
-
-    const gridRadius = 4;
-    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
-
-    const currentGridX = Math.floor(npcNode.lng / LNG_GRID_SIZE_DEG);
-    const currentGridY = Math.floor(npcNode.lat / LAT_GRID_SIZE_DEG);
-
-    const offsetX = Math.floor(Math.random() * 3) - 1;
-    const offsetY = Math.floor(Math.random() * 3) - 1;
-
-    let newGridX = currentGridX + offsetX;
-    let newGridY = currentGridY + offsetY;
-
-    const minGridX = playerGridX - gridRadius;
-    const maxGridX = playerGridX + gridRadius;
-    const minGridY = playerGridY - gridRadius;
-    const maxGridY = playerGridY + gridRadius;
-
-    newGridX = Math.max(minGridX, Math.min(maxGridX, newGridX));
-    newGridY = Math.max(minGridY, Math.min(maxGridY, newGridY));
-
-    npcNode.lat = (newGridY + 0.50) * LAT_GRID_SIZE_DEG;
-    npcNode.lng = (newGridX + 0.50) * LNG_GRID_SIZE_DEG;
-
-    npcNode.marker.setLngLat([npcNode.lng, npcNode.lat]);
-
-    const infoElem = document.getElementById('plot-info');
-    if (infoElem && infoElem.innerText.includes('Timber Pete')) {
-      renderNPCCard();
-    }
-  }
+  function checkNPCProximity(def) {
+      const node = npcNodes[def.id];
+      if (!node || !userLat || !userLng) return;
   
-  function checkNPCProximity() {
-    if (npcDisabled) return;
-    if (!npcNode || !userLat || !userLng) return;
-
-    const gridRadius = 4;
-    const { gridX: playerGridX, gridY: playerGridY } = latLngToGrid(userLat, userLng);
-    const npcGridX = Math.floor(npcNode.lng / LNG_GRID_SIZE_DEG);
-    const npcGridY = Math.floor(npcNode.lat / LAT_GRID_SIZE_DEG);
-
-    if (Math.abs(npcGridX - playerGridX) > gridRadius || Math.abs(npcGridY - playerGridY) > gridRadius) {
-      spawnNPC();
-    }
+      const { gridX, gridY } = latLngToGrid(userLat, userLng);
+      const npcGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
+      const npcGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
+  
+      if (Math.abs(npcGridX - gridX) > def.spawnRadius ||
+          Math.abs(npcGridY - gridY) > def.spawnRadius) {
+          spawnNPC(def);
+      }
   }
 
   function initNPCMovement() {
-    const FOUR_MINUTES_MS = 4 * 60 * 1000;
-    setInterval(moveNPC, FOUR_MINUTES_MS);
+      const FOUR_MINUTES_MS = 4 * 60 * 1000; // 4 minutes
+	  //const FOUR_MINUTES_MS = 10 * 1000;        // testing: 10 seconds
+  
+      setInterval(() => {
+          for (const key in NPC_DEFS) {
+              moveNPC(NPC_DEFS[key]);
+          }
+      }, FOUR_MINUTES_MS);
   }
 
-  function renderNPCCard() {
-      if (npcDisabled) return;
-      if (!npcNode || !userLat || !userLng) return;
+  function renderNPCCard(def) {
+      const node = npcNodes[def.id];
+      if (!node || !userLat || !userLng) return;
   
-      const container = document.getElementById('plot-info');
+      const container = document.getElementById("plot-info");
   
-      startLiveDistanceUpdates("npc", npcNode, (distRounded) => {
+      startLiveDistanceUpdates("npc", node, (distRounded) => {
           const dist = Number(distRounded);
-          const inRange = dist <= NPC_TALK_RADIUS_FEET;
+          const inRange = dist <= def.talkRadius;
   
           if (!inRange) {
               container.innerHTML = `
-                  <b>Timber Pete:</b><br/>
+                  <b>${def.name}:</b><br/>
                   <b>Distance:</b> ${distRounded} ft away<br/>
-                  <small style="color:#ef4444;">Walk within 100 ft to trade with him!</small>
+                  <small style="color:#ef4444;">Walk within ${def.talkRadius} ft to trade.</small>
               `;
               return;
           }
   
-          const canAfford = playerGold >= AXE_PRICE;
-          const buttonText = canAfford ? `🪓 Buy Axe (${AXE_PRICE} Gold)` : `❌ Need ${AXE_PRICE} Gold`;
-          const disabledAttr = canAfford ? '' : 'disabled';
+          let canAfford = false;
+          let requirementLabel = "";
+          
+          if (def.tradeType === "gold") {
+              canAfford = playerGold >= def.price;
+              requirementLabel = `${def.price} Gold`;
+          }
+          
+          if (def.tradeType === "wood") {
+              canAfford = playerWood >= def.price;
+              requirementLabel = `${def.price} Wood`;
+          }
+          const disabledAttr = canAfford ? "" : "disabled";
   
           container.innerHTML = `
-              <b>Timber Pete:</b><br/>
-              <i>"Need something for chopping wood?"</i><br/>
-              <b>Item:</b> 🪓 Axe<br/>
-              <b>Price:</b> 💰 ${AXE_PRICE} Gold<br/>
-              <button id="buy-axe-btn" class="btn buy-btn" style="margin-top:6px;" ${disabledAttr}>${buttonText}</button>
+              <b>${def.name}:</b><br/>
+              <i>"Looking to trade?"</i><br/>
+              <b>Item:</b> ${def.tradeItem}<br/>
+              <b>Cost:</b> ${requirementLabel}<br/>
+              <button id="npc-buy-btn" class="btn buy-btn" ${canAfford ? "" : "disabled"}>
+                  Trade for ${def.tradeItem}
+              </button>
           `;
   
           if (canAfford) {
-              document.getElementById('buy-axe-btn').addEventListener('click', buyAxe);
+              document.getElementById("npc-buy-btn").addEventListener("click", () => {
+                  buyNPCItem(def);
+              });
           }
       });
   }
 
-  function buyAxe() {
-    if (playerGold >= AXE_PRICE && !playerInventory.has('axe')) {
-      playerGold -= AXE_PRICE;
-      playerInventory.add('axe');
+  function buyNPCItem(def) {
   
-      localStorage.setItem('rpg_player_gold', playerGold);
-      localStorage.setItem('rpg_player_inventory', JSON.stringify(Array.from(playerInventory)));
+      // Prevent duplicate purchases
+      if (playerInventory.has(def.tradeItem)) return;
   
-      // Permanently disable Timber Pete
-      npcDisabled = true;
-      localStorage.setItem('rpg_npc_disabled', 'true');
-  
-      if (npcNode && npcNode.marker) {
-        npcNode.marker.remove();
-        npcNode = null;
+      // Resource check + deduction
+      if (def.tradeType === "gold") {
+          if (playerGold < def.price) return;
+          playerGold -= def.price;
       }
+  
+      if (def.tradeType === "wood") {
+          if (playerWood < def.price) return;
+          playerWood -= def.price;
+      }
+  
+      // Add item to inventory
+      playerInventory.add(def.tradeItem);
+  
+      // Save updated resources
+      localStorage.setItem('rpg_player_gold', playerGold);
+      localStorage.setItem('rpg_player_wood', playerWood);
+      localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+  
+      // Disable this NPC forever
+      localStorage.setItem(def.disabledKey, "true");
+  
+      npcNodes[def.id]?.marker?.remove();
+      npcNodes[def.id] = null;
   
       updateGoldDisplay();
       updateInventoryDisplay();
   
-      // Show farewell message ONCE, at the moment Pete leaves
-      document.getElementById('status').innerText = '🪓 Acquired an Axe!';
-      document.getElementById('plot-info').innerHTML = `
-        <b>Timber Pete:</b><br/>
-        <small style="color:#94a3b8;">He has left the forest.</small>
+      document.getElementById("status").innerText = `Acquired ${def.tradeItem}!`;
+      document.getElementById("plot-info").innerHTML = `
+          <b>${def.name}:</b><br/>
+          <small style="color:#94a3b8;">They have left the forest.</small>
       `;
-    }
+  }
+  
+  function initNPCs() {
+      for (const key in NPC_DEFS) {
+          spawnNPC(NPC_DEFS[key]);
+      }
+  
+      setInterval(() => {
+          for (const key in NPC_DEFS) {
+              moveNPC(NPC_DEFS[key]);
+          }
+      }, 4 * 60 * 1000);
+  
+      setInterval(() => {
+          for (const key in NPC_DEFS) {
+              checkNPCProximity(NPC_DEFS[key]);
+          }
+      }, 2000);
   }
   
   function collectCoin(node) {
@@ -1224,7 +1286,7 @@
     for (let i = 0; i < initialCount; i++) {
       spawnSingleCoin();
     }
-    setInterval(spawnSingleCoin, 20000);
+    setInterval(spawnSingleCoin, 10000);
   }
 
   function checkCoinProximity() {
@@ -1415,13 +1477,25 @@
       currentGridCenterKey = null;
       spawnTrees();
 	  
-      // Reset NPC state
-      localStorage.removeItem('rpg_npc_disabled');
-      npcDisabled = false;
-      npcNode = null;
+      // Reset ALL NPC states
+      for (const key in NPC_DEFS) {
+          const def = NPC_DEFS[key];
       
-      // Respawn Pete immediately
-      spawnNPC();
+          // Clear each NPC's disabled flag
+          localStorage.removeItem(def.disabledKey);
+      
+          // Remove any existing NPC marker
+          if (npcNodes[def.id]?.marker) {
+              npcNodes[def.id].marker.remove();
+          }
+      
+          npcNodes[def.id] = null;
+      }
+      
+      // Respawn all NPCs immediately
+      for (const key in NPC_DEFS) {
+          spawnNPC(NPC_DEFS[key]);
+      }
       
       alert("Save data cleared!");
     }
@@ -1495,7 +1569,8 @@
         refreshMapGrid();
         spawnTrees();
         initCoinSpawns();
-        spawnNPC();
+        spawnNPC(NPC_DEFS.timberPete);
+		spawnNPC(NPC_DEFS.minerGus);
         initNPCMovement();    
         map.jumpTo({ center: [userLng, userLat], zoom: 18 });
       } else {
@@ -1503,7 +1578,9 @@
         refreshMapGrid();
         spawnTrees();
         checkCoinProximity();
-        checkNPCProximity();    
+        for (const key in NPC_DEFS) {
+            checkNPCProximity(NPC_DEFS[key]);
+        }  
         // AUTO-CENTER & COMPASS TRACKING
         if (autoCenterEnabled) {
           if (compassActive) {
@@ -1660,22 +1737,24 @@
     }
 
     function handleDeviceOrientation(event) {
-      if (!compassActive) return;
-
-      const heading = getHeadingDegrees(event);
-
-      if (heading !== null && !isNaN(heading)) {
-        if (autoCenterEnabled && userLat && userLng) {
-          // Instantly lock camera center on player while updating bearing
-          map.jumpTo({
-            center: [userLng, userLat],
-            bearing: heading
-          });
-        } else {
-          // If auto-center is off, just rotate around current map view
-          map.rotateTo(heading, { duration: 50 });
+        if (!compassActive) return;
+    
+        const heading = getHeadingDegrees(event);
+    
+        if (heading !== null && !isNaN(heading)) {
+            if (autoCenterEnabled && userLat && userLng) {
+                map.jumpTo({
+                    center: [userLng, userLat],
+                    bearing: heading,
+                    zoom: 18
+                });
+            } else {
+                map.rotateTo(heading, { 
+                    duration: 50,
+                    zoom: 18
+                });
+            }
         }
-      }
     }
 
     function updateCompassUI() {
