@@ -1177,23 +1177,26 @@ function renderCutTreeCard(treeNode) {
       `;
   }
   
-  function initNPCs() {
-      for (const key in NPC_DEFS) {
-          spawnNPC(NPC_DEFS[key]);
-      }
-  
-      setInterval(() => {
-          for (const key in NPC_DEFS) {
-              moveNPC(NPC_DEFS[key]);
-          }
-      }, 4 * 60 * 1000);
-  
-      setInterval(() => {
-          for (const key in NPC_DEFS) {
-              checkNPCProximity(NPC_DEFS[key]);
-          }
-      }, 2000);
-  }
+function initNPCs() {
+    for (const key in NPC_DEFS) {
+        spawnNPC(NPC_DEFS[key]);
+    }
+    for (const key in QUEST_NPC_DEFS) {
+        spawnNPC(QUEST_NPC_DEFS[key]);   // ⭐ Add this
+    }
+
+    // movement
+    setInterval(() => {
+        for (const key in NPC_DEFS) moveNPC(NPC_DEFS[key]);
+        for (const key in QUEST_NPC_DEFS) moveNPC(QUEST_NPC_DEFS[key]);
+    }, 4 * 60 * 1000);
+
+    // proximity
+    setInterval(() => {
+        for (const key in NPC_DEFS) checkNPCProximity(NPC_DEFS[key]);
+        for (const key in QUEST_NPC_DEFS) checkNPCProximity(QUEST_NPC_DEFS[key]);
+    }, 2000);
+}
   
   function isQuestComplete(questId) {
       return questState[questId] === true;
@@ -1750,6 +1753,9 @@ function renderCutTreeCard(treeNode) {
         for (const key in NPC_DEFS) {
             checkNPCProximity(NPC_DEFS[key]);
         }  
+        for (const key in QUEST_NPC_DEFS) {
+            checkNPCProximity(QUEST_NPC_DEFS[key]);   // ⭐ Add this
+        }
         // AUTO-CENTER & COMPASS TRACKING
         if (autoCenterEnabled) {
           if (compassActive) {
