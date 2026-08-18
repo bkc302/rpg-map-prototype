@@ -467,6 +467,8 @@
   
   // Tracks chopped trees: { "gridY_gridX": timestamp_when_chopped }
   let choppedTrees = JSON.parse(localStorage.getItem('rpg_chopped_trees') || '{}');
+  
+  let questState = JSON.parse(localStorage.getItem("rpg_quest_state") || "{}");
 
   let selectedPlotId = null;
 
@@ -482,7 +484,7 @@
           name: "Timber Pete",
           img: "pete.png",
           talkRadius: 100,
-          spawnRadius: 4,
+          spawnRadius: 3,
           offsetX: 0.25, // 0.50 is centered
           offsetY: 0.25,
           tradeItem: "axe",
@@ -496,13 +498,39 @@
           name: "Miner Gus",
           img: "gus.png",
           talkRadius: 100,
-          spawnRadius: 4,
+          spawnRadius: 2,
           offsetX: 0.75,
           offsetY: 0.25,
           tradeItem: "mining pick",
           tradeType: "wood",
           price: 20,
           disabledKey: "rpg_npc_disabled_gus"
+      }
+  };
+  
+  const QUEST_NPC_DEFS = {
+      rangerBramble: {
+          id: "rangerBramble",
+          name: "Ranger Bramblefoot",
+          img: "bramblefoot.png",
+          talkRadius: 100,
+          spawnRadius: 1,
+          offsetX: 0.50,
+          offsetY: 0.20,
+  
+          questId: "bramble_intro_quest",
+          disappearOnComplete: false,
+  
+          requiredItems: ["axe", "mining pick"],
+          rewardGold: 50,
+          rewardItems: [],
+  
+          dialog: {
+              needItems: "You’ll need an axe and a mining pick before you can begin.",
+              partial: "Good start. You still need the remaining tools.",
+              ready: "Excellent work! Here’s your reward.",
+              afterComplete: "You’re ready for the world now."
+          }
       }
   };
 
@@ -737,7 +765,7 @@
 function renderTreeCard(treeNode) {
     const container = document.getElementById('plot-info');
 
-    // ⭐ Prevent Chop button on chopped trees
+    // Prevent Chop button on chopped trees
     if (treeNode.isChopped) {
         renderCutTreeCard(treeNode);
         return;
@@ -792,7 +820,7 @@ function chopTree(treeNode) {
     choppedTrees[treeNode.tileKey] = Date.now();
     localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
 
-    // ⭐ NEW: mark node as chopped
+    // mark node as chopped
     treeNode.isChopped = true;
 
     // Remove old tree marker
@@ -819,10 +847,10 @@ function chopTree(treeNode) {
     treeNode.marker = cutMarker;
     treeNode.element = cutContainer;
 
-    const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
+    const yieldText = woodYield === 5 ? '🪵 Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
     document.getElementById('status').innerText = yieldText;
 
-    // ⭐ NEW: immediately show stump UI so Chop button disappears
+    // immediately show stump UI so Chop button disappears
     renderCutTreeCard(treeNode);
 }
 
@@ -1004,17 +1032,23 @@ function renderCutTreeCard(treeNode) {
   }
 
   function initNPCMovement() {
-      const FOUR_MINUTES_MS = 4 * 60 * 1000; // 4 minutes
-	  //const FOUR_MINUTES_MS = 10 * 1000;        // testing: 10 seconds
+      const TWO_MINUTES_MS = 2 * 60 * 1000; // 2 minutes
+	  //const TWO_MINUTES_MS = 10 * 1000;        // testing: 10 seconds
   
       setInterval(() => {
           for (const key in NPC_DEFS) {
               moveNPC(NPC_DEFS[key]);
           }
-      }, FOUR_MINUTES_MS);
+      }, TWO_MINUTES_MS);
   }
 
   function renderNPCCard(def) {
+      // If this NPC is a quest NPC, use quest logic instead
+      if (QUEST_NPC_DEFS[def.id]) {
+          renderQuestNPC(QUEST_NPC_DEFS[def.id]);
+          return;
+      }  
+  
       const node = npcNodes[def.id];
       if (!node || !userLat || !userLng) return;
   
@@ -1121,6 +1155,82 @@ function renderCutTreeCard(treeNode) {
               checkNPCProximity(NPC_DEFS[key]);
           }
       }, 2000);
+  }
+  
+  function isQuestComplete(questId) {
+      return questState[questId] === true;
+  }
+  
+  function completeQuest(questId) {
+      questState[questId] = true;
+      localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
+  }
+  
+  function renderQuestNPC(def) {
+      const container = document.getElementById("plot-info");
+      const dialog = def.dialog;
+      const node = npcNodes[def.id];
+  
+      // Stop any previous updater (tree, coin, merchant)
+      stopLiveDistanceUpdates();
+  
+      // Start quest NPC distance tracking
+      startLiveDistanceUpdates("npc", node, (dist) => {
+          const inRange = dist <= def.talkRadius;
+  
+          if (!inRange) {
+              container.innerHTML = `
+                  <b>${def.name}:</b><br/>
+                  <b>Distance:</b> ${dist} ft away<br/>
+                  <small style="color:#ef4444;">Walk within ${def.talkRadius} ft to talk.</small>
+              `;
+              return;
+          }
+  
+          // Now show quest dialog normally
+          const hasAllItems = def.requiredItems.every(item => playerInventory.has(item));
+  
+          if (isQuestComplete(def.questId)) {
+              container.innerHTML = `
+                  <b>${def.name}:</b><br/>
+                  <i>${dialog.afterComplete}</i>
+              `;
+              return;
+          }
+  
+          if (!hasAllItems) {
+              const missing = def.requiredItems.filter(item => !playerInventory.has(item));
+              const partial = missing.length < def.requiredItems.length;
+  
+              container.innerHTML = `
+                  <b>${def.name}:</b><br/>
+                  <i>${partial ? dialog.partial : dialog.needItems}</i>
+              `;
+              return;
+          }
+  
+          // Reward logic
+          playerGold += def.rewardGold;
+          localStorage.setItem("rpg_player_gold", playerGold);
+          updateGoldDisplay();
+  
+          for (const item of def.rewardItems) {
+              playerInventory.add(item);
+          }
+          localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+  
+          completeQuest(def.questId);
+  
+          container.innerHTML = `
+              <b>${def.name}:</b><br/>
+              <i>${dialog.ready}</i>
+          `;
+  
+          if (def.disappearOnComplete) {
+              node.marker.remove();
+              npcNodes[def.id] = null;
+          }
+      });
   }
   
   function collectCoin(node) {
@@ -1264,7 +1374,7 @@ function renderCutTreeCard(treeNode) {
       
           const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
       
-          // ⭐ Auto-collect BEFORE opening UI
+          // Auto-collect BEFORE opening UI
           if (dist <= 100) {
               collectCoin(goldNode);
               return;
@@ -1314,7 +1424,7 @@ function renderCutTreeCard(treeNode) {
           const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
   
           if (dist <= PICKUP_RADIUS_FEET) {
-              collectCoin(node);   // ⭐ unified auto-collect
+              collectCoin(node);   // unified auto-collect
           }
       }
   }
@@ -1468,52 +1578,53 @@ function renderCutTreeCard(treeNode) {
   }
 
   // UI & GEOLOCATION EVENT LISTENERS
-   document.getElementById('dev-reset-btn').addEventListener('click', () => {
-    if (confirm("Reset all gold, inventory, wood, and wipe owned plots?")) {
-      localStorage.removeItem('rpg_player_gold');
-      localStorage.removeItem('rpg_player_wood');
-      localStorage.removeItem('rpg_claimed_plots');
-      localStorage.removeItem('rpg_player_inventory');
-      localStorage.removeItem('rpg_chopped_trees');
-      
-      playerGold = 0;
-      playerWood = 0;
-      claimedPlotIds.clear();
-      playerInventory.clear();
-      choppedTrees = {};
-      selectedPlotId = null;
+  document.getElementById('dev-reset-btn').addEventListener('click', () => {
+      if (confirm("Reset all gold, inventory, wood, and wipe owned plots?")) {
   
-      updateGoldDisplay();
-      updateInventoryDisplay();
-      renderSelectedPlotCard();
-      refreshMapGrid();
-      
-      // Force tree refresh
-      currentGridCenterKey = null;
-      spawnTrees();
-	  
-      // Reset ALL NPC states
-      for (const key in NPC_DEFS) {
-          const def = NPC_DEFS[key];
-      
-          // Clear each NPC's disabled flag
-          localStorage.removeItem(def.disabledKey);
-      
-          // Remove any existing NPC marker
-          if (npcNodes[def.id]?.marker) {
-              npcNodes[def.id].marker.remove();
+          localStorage.removeItem('rpg_player_gold');
+          localStorage.removeItem('rpg_player_wood');
+          localStorage.removeItem('rpg_claimed_plots');
+          localStorage.removeItem('rpg_player_inventory');
+          localStorage.removeItem('rpg_chopped_trees');
+  
+          // RESET QUESTS
+          localStorage.removeItem("rpg_quest_state");
+          questState = {};
+  
+          playerGold = 0;
+          playerWood = 0;
+          claimedPlotIds.clear();
+          playerInventory.clear();
+          choppedTrees = {};
+          selectedPlotId = null;
+  
+          updateGoldDisplay();
+          updateInventoryDisplay();
+          renderSelectedPlotCard();
+          refreshMapGrid();
+  
+          currentGridCenterKey = null;
+          spawnTrees();
+  
+          // Reset ALL NPC states
+          for (const key in NPC_DEFS) {
+              const def = NPC_DEFS[key];
+              localStorage.removeItem(def.disabledKey);
+  
+              if (npcNodes[def.id]?.marker) {
+                  npcNodes[def.id].marker.remove();
+              }
+  
+              npcNodes[def.id] = null;
           }
-      
-          npcNodes[def.id] = null;
+  
+          // Respawn merchant NPCs immediately
+          for (const key in NPC_DEFS) {
+              spawnNPC(NPC_DEFS[key]);
+          }
+  
+          alert("Save data cleared!");
       }
-      
-      // Respawn all NPCs immediately
-      for (const key in NPC_DEFS) {
-          spawnNPC(NPC_DEFS[key]);
-      }
-      
-      alert("Save data cleared!");
-    }
   });
 
   document.getElementById('start-btn').addEventListener('click', () => {
@@ -1586,6 +1697,7 @@ function renderCutTreeCard(treeNode) {
         initCoinSpawns();
         spawnNPC(NPC_DEFS.timberPete);
 		spawnNPC(NPC_DEFS.minerGus);
+		spawnNPC(QUEST_NPC_DEFS.rangerBramble);
         initNPCMovement();    
         map.jumpTo({ center: [userLng, userLat], zoom: 18 });
       } else {
