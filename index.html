@@ -847,6 +847,7 @@ function renderCutTreeCard(treeNode) {
   let chopCancelCheck = null;
 
   function startChopCountdown(treeNode) {
+    stopLiveDistanceUpdates();
     const container = document.getElementById('plot-info');
     const progressBox = document.getElementById('chop-progress');
     const progressBar = document.getElementById('chop-progress-bar');
@@ -903,13 +904,14 @@ function renderCutTreeCard(treeNode) {
   }
   
   function finishChop(treeNode) {
-    clearInterval(chopInterval);
-    clearInterval(chopCancelCheck);
-
-    document.getElementById('chop-progress').style.display = 'none';
-
-    // Actually chop the tree
-    chopTree(treeNode);
+      clearInterval(chopInterval);
+      clearInterval(chopCancelCheck);
+  
+      document.getElementById('chop-progress').style.display = 'none';
+  
+      stopLiveDistanceUpdates();
+  
+      chopTree(treeNode);
   }
   
   function spawnNPC(def) {
