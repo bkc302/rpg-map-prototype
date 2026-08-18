@@ -734,94 +734,107 @@
     }
   }
   
-  function renderTreeCard(treeNode) {
-      const container = document.getElementById('plot-info');
-  
-      startLiveDistanceUpdates("tree", treeNode, (dist) => {
-          const inRange = dist <= TREE_CUT_RADIUS_FEET;
-          const hasAxe = playerInventory.has('axe');
-  
-          if (!hasAxe) {
-              container.innerHTML = `
-                  <b>🌳 Tree:</b><br/>
-                  <b>Distance:</b> ${dist} ft away<br/>
-                  <small style="font-size:14px; color:#f7f7f7;">⚠️ You need an Axe to chop this tree!</small>
-              `;
-              return;
-          }
-  
-          if (!inRange) {
-              container.innerHTML = `
-                  <b>🌳 Tree:</b><br/>
-                  <b>Distance:</b> ${dist} ft away<br/>
-                  <small style="font-size:14px; color:#f7f7f7;">Walk within 100 ft to chop down!</small>
-              `;
-              return;
-          }
-  
-          container.innerHTML = `
-              <b>🌳 Tree:</b><br/>
-              <b>Distance:</b> ${dist} ft away (In Range)<br/>
-              <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
-          `;
-  
-          document.getElementById('chop-tree-btn').addEventListener('click', () => {
-              startChopCountdown(treeNode);
-          });
-      });
-  }
+function renderTreeCard(treeNode) {
+    const container = document.getElementById('plot-info');
 
-  function chopTree(treeNode) {
-      if (!playerInventory.has('axe')) return;
-  
-      // Weighted wood yield (1 common -> 5 rare)
-      const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
-      const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
-  
-      playerWood += woodYield;
-      localStorage.setItem('rpg_player_wood', playerWood);
-      updateInventoryDisplay();
-  
-      // Mark tree as chopped with current timestamp
-      choppedTrees[treeNode.tileKey] = Date.now();
-      localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-  
-      // Remove old tree marker (but DO NOT remove the node from activeTreeNodes)
-      treeNode.marker.remove();
-  
-      // Create cut-tree marker
-      const cutContainer = document.createElement('div');
-      cutContainer.className = 'tree-marker-container';
-  
-      const cutImg = document.createElement('img');
-      cutImg.className = 'tree-marker-icon';
-      cutImg.src = 'cut_tree.png';
-      cutContainer.appendChild(cutImg);
-  
-      const cutMarker = new maplibregl.Marker({
-          element: cutContainer,
-          anchor: 'center'
-      }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
-	  
-      // Disable clicking on stump
-      cutContainer.style.pointerEvents = "none";
-  
-      // Update existing node instead of replacing or re-adding it
-      treeNode.marker = cutMarker;
-      treeNode.element = cutContainer;
-  
-      // DO NOT push treeNode again — it already exists in activeTreeNodes
-  
-      const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
-      document.getElementById('status').innerText = yieldText;
-  
-      document.getElementById('plot-info').innerHTML = `
-        <b>🌳 Tree:</b><br/>
-        <span style="color:#a855f7;">✨ Tree chopped! (+${woodYield} Wood)</span><br/>
+    // ⭐ Prevent Chop button on chopped trees
+    if (treeNode.isChopped) {
+        renderCutTreeCard(treeNode);
+        return;
+    }
+
+    startLiveDistanceUpdates("tree", treeNode, (dist) => {
+        const inRange = dist <= TREE_CUT_RADIUS_FEET;
+        const hasAxe = playerInventory.has('axe');
+
+        if (!hasAxe) {
+            container.innerHTML = `
+                <b>🌳 Tree:</b><br/>
+                <b>Distance:</b> ${dist} ft away<br/>
+                <small style="font-size:14px; color:#f7f7f7;">⚠️ You need an Axe to chop this tree!</small>
+            `;
+            return;
+        }
+
+        if (!inRange) {
+            container.innerHTML = `
+                <b>🌳 Tree:</b><br/>
+                <b>Distance:</b> ${dist} ft away<br/>
+                <small style="font-size:14px; color:#f7f7f7;">Walk within 100 ft to chop down!</small>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <b>🌳 Tree:</b><br/>
+            <b>Distance:</b> ${dist} ft away (In Range)<br/>
+            <button id="chop-tree-btn" class="btn buy-btn" style="margin-top:6px;">🪓 Chop Down Tree</button>
+        `;
+
+        document.getElementById('chop-tree-btn').addEventListener('click', () => {
+            startChopCountdown(treeNode);
+        });
+    });
+}
+
+function chopTree(treeNode) {
+    if (!playerInventory.has('axe')) return;
+
+    // Weighted wood yield (1 common -> 5 rare)
+    const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
+    const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
+
+    playerWood += woodYield;
+    localStorage.setItem('rpg_player_wood', playerWood);
+    updateInventoryDisplay();
+
+    // Mark tree as chopped with current timestamp
+    choppedTrees[treeNode.tileKey] = Date.now();
+    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+
+    // ⭐ NEW: mark node as chopped
+    treeNode.isChopped = true;
+
+    // Remove old tree marker
+    treeNode.marker.remove();
+
+    // Create cut-tree marker
+    const cutContainer = document.createElement('div');
+    cutContainer.className = 'tree-marker-container';
+
+    const cutImg = document.createElement('img');
+    cutImg.className = 'tree-marker-icon';
+    cutImg.src = 'cut_tree.png';
+    cutContainer.appendChild(cutImg);
+
+    const cutMarker = new maplibregl.Marker({
+        element: cutContainer,
+        anchor: 'center'
+    }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
+
+    // Disable clicking on stump
+    cutContainer.style.pointerEvents = "none";
+
+    // Update existing node
+    treeNode.marker = cutMarker;
+    treeNode.element = cutContainer;
+
+    const yieldText = woodYield === 5 ? '🌟 JACKPOT! Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
+    document.getElementById('status').innerText = yieldText;
+
+    // ⭐ NEW: immediately show stump UI so Chop button disappears
+    renderCutTreeCard(treeNode);
+}
+
+function renderCutTreeCard(treeNode) {
+    const container = document.getElementById('plot-info');
+    container.innerHTML = `
+        <b>🌳 Tree Stump</b><br/>
+        <span style="color:#a855f7;">This tree has been chopped.</span><br/>
         <small style="color:#94a3b8;">Respawns in 5 minutes.</small>
-      `;
-  }
-
+    `;
+}  
+  
   // Toggles tree visibility so they are only displayed at zoom level >= 18
   function updateTreeVisibility() {
     const isVisible = map.getZoom() >= 17.5;
