@@ -468,7 +468,14 @@
   // Tracks chopped trees: { "gridY_gridX": timestamp_when_chopped }
   let choppedTrees = JSON.parse(localStorage.getItem('rpg_chopped_trees') || '{}');
   
-  let questState = JSON.parse(localStorage.getItem("rpg_quest_state") || "{}");
+  let questState = {};
+  
+  try {
+      questState = JSON.parse(localStorage.getItem("rpg_quest_state")) || {};
+  } catch {
+      questState = {};
+      localStorage.removeItem("rpg_quest_state");
+  }
 
   let selectedPlotId = null;
 
@@ -518,19 +525,37 @@
           offsetX: 0.50,
           offsetY: 0.20,
   
-          questId: "bramble_intro_quest",
-          disappearOnComplete: false,
+          quests: [
+              {
+                  questId: "bramble_intro_quest",
+                  requiredItems: ["axe"],   // axe is the final requirement
+                  rewardGold: 20,
+                  rewardItems: [],
+                  disappearOnComplete: false,
   
-          requiredItems: ["axe", "mining pick"],
-          rewardGold: 50,
-          rewardItems: [],
+                  dialog: {
+                      needItems: "To begin your journey, you’ll need to earn some gold. Walk around and gather at least 20 gold, then visit Timber Pete to buy yourself an axe. Once you have it, return to me.",
+                      partial: "You're making progress. Gather enough gold and buy an axe from Timber Pete.",
+                      ready: "Excellent work! That axe will serve you well. Here’s 20 gold for your effort.",
+                      afterComplete: "You're ready for the next step."
+                  }
+              },
   
-          dialog: {
-              needItems: "You’ll need an axe and a mining pick before you can begin.",
-              partial: "Good start. You still need the remaining tools.",
-              ready: "Excellent work! Here’s your reward.",
-              afterComplete: "You’re ready for the world now."
-          }
+              {
+                  questId: "bramble_second_quest",
+                  requiredItems: ["mining pick"], // mining pick is the final requirement
+                  rewardGold: 30,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+  
+                  dialog: {
+                      needItems: "Now that you have that shiny new axe, go cut down some trees and gather wood. Miner Gus will trade you a mining pick for 20 wood. Come see me once you have that pick.",
+                      partial: "Keep chopping! You’ll need enough wood to trade with Miner Gus.",
+                      ready: "Well done! With that mining pick, you’re ready to gather stone and ore.",
+                      afterComplete: "You've proven yourself again, adventurer."
+                  }
+              }
+          ]
       }
   };
 
@@ -994,6 +1019,12 @@ function renderCutTreeCard(treeNode) {
       const node = npcNodes[def.id];
       if (!node || !userLat || !userLng) return;
   
+      // Prevent frustration: NPC does NOT move if player is close
+      const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
+      if (dist <= def.talkRadius + 50) {
+          return; // Player is close → freeze movement
+      }
+  
       const { gridX, gridY } = latLngToGrid(userLat, userLng);
       const radius = def.spawnRadius;
   
@@ -1030,16 +1061,23 @@ function renderCutTreeCard(treeNode) {
           spawnNPC(def);
       }
   }
-
+  
   function initNPCMovement() {
-      const TWO_MINUTES_MS = 2 * 60 * 1000; // 2 minutes
-	  //const TWO_MINUTES_MS = 10 * 1000;        // testing: 10 seconds
+      const FOUR_MINUTES_MS = 4 * 60 * 1000; // 4 minutes
+	  //const FOUR_MINUTES_MS = 10 * 1000;   // for dev testing: 10 seconds
   
       setInterval(() => {
+          // Move merchant NPCs
           for (const key in NPC_DEFS) {
               moveNPC(NPC_DEFS[key]);
           }
-      }, TWO_MINUTES_MS);
+  
+          // Move quest NPCs
+          for (const key in QUEST_NPC_DEFS) {
+              moveNPC(QUEST_NPC_DEFS[key]);
+          }
+  
+      }, FOUR_MINUTES_MS);
   }
 
   function renderNPCCard(def) {
@@ -1168,13 +1206,10 @@ function renderCutTreeCard(treeNode) {
   
   function renderQuestNPC(def) {
       const container = document.getElementById("plot-info");
-      const dialog = def.dialog;
       const node = npcNodes[def.id];
   
-      // Stop any previous updater (tree, coin, merchant)
       stopLiveDistanceUpdates();
   
-      // Start quest NPC distance tracking
       startLiveDistanceUpdates("npc", node, (dist) => {
           const inRange = dist <= def.talkRadius;
   
@@ -1187,20 +1222,26 @@ function renderCutTreeCard(treeNode) {
               return;
           }
   
-          // Now show quest dialog normally
-          const hasAllItems = def.requiredItems.every(item => playerInventory.has(item));
+          //  Find the first quest that is NOT complete
+          const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
   
-          if (isQuestComplete(def.questId)) {
+          //  If all quests are complete
+          if (!nextQuest) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
-                  <i>${dialog.afterComplete}</i>
+                  <i>You’ve completed all my tasks. Well done!</i>
               `;
               return;
           }
   
+          const dialog = nextQuest.dialog;
+  
+          //  Check required items
+          const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
+  
           if (!hasAllItems) {
-              const missing = def.requiredItems.filter(item => !playerInventory.has(item));
-              const partial = missing.length < def.requiredItems.length;
+              const missing = nextQuest.requiredItems.filter(item => !playerInventory.has(item));
+              const partial = missing.length < nextQuest.requiredItems.length;
   
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
@@ -1209,24 +1250,25 @@ function renderCutTreeCard(treeNode) {
               return;
           }
   
-          // Reward logic
-          playerGold += def.rewardGold;
-          localStorage.setItem("rpg_player_gold", playerGold);
+          //  Reward logic
+          playerGold += nextQuest.rewardGold;
           updateGoldDisplay();
+          localStorage.setItem("rpg_player_gold", playerGold);
   
-          for (const item of def.rewardItems) {
+          for (const item of nextQuest.rewardItems) {
               playerInventory.add(item);
           }
           localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
   
-          completeQuest(def.questId);
+          completeQuest(nextQuest.questId);
   
           container.innerHTML = `
               <b>${def.name}:</b><br/>
               <i>${dialog.ready}</i>
           `;
   
-          if (def.disappearOnComplete) {
+          //  Disappear logic (per quest)
+          if (nextQuest.disappearOnComplete) {
               node.marker.remove();
               npcNodes[def.id] = null;
           }
