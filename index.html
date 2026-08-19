@@ -832,7 +832,7 @@
     });
   }
 
-  function chopTree(treeNode) {
+function chopTree(treeNode) {
     if (!playerInventory.has('axe')) return;
 
     const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
@@ -847,31 +847,16 @@
 
     treeNode.isChopped = true;
 
-    treeNode.marker.remove();
-
-    const cutContainer = document.createElement('div');
-    cutContainer.className = 'tree-marker-container';
-
-    const cutImg = document.createElement('img');
-    cutImg.className = 'tree-marker-icon';
-    cutImg.src = 'cut_tree.png';
-    cutContainer.appendChild(cutImg);
-
-    const cutMarker = new maplibregl.Marker({
-        element: cutContainer,
-        anchor: 'center'
-    }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
-
-    cutContainer.style.pointerEvents = "none";
-
-    treeNode.marker = cutMarker;
-    treeNode.element = cutContainer;
+    // Just update the existing element/image instead of replacing the marker
+    const img = treeNode.element.querySelector('.tree-marker-icon');
+    if (img) img.src = 'cut_tree.png';
+    treeNode.element.style.pointerEvents = 'none';
 
     const yieldText = woodYield === 5 ? '🪵 Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
     document.getElementById('status').innerText = yieldText;
 
     renderCutTreeCard(treeNode);
-  }
+}
 
   function renderCutTreeCard(treeNode) {
     const container = document.getElementById('plot-info');
