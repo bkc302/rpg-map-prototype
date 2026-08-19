@@ -456,7 +456,7 @@
   
   const PLOT_PRICE = 100;
   const AXE_PRICE = 20;
-  const TREE_CUT_RADIUS_FEET = 100;
+  const TREE_CUT_RADIUS_FEET = 150;
   const TREE_RESPAWN_MS = 5 * 60 * 1000; // 5 Minutes
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
@@ -482,7 +482,7 @@
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
   const MAX_GOLD_NODES = 30;
-  const PICKUP_RADIUS_FEET = 100;
+  const PICKUP_RADIUS_FEET = 150;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
    
   const NPC_DEFS = {
@@ -490,7 +490,7 @@
           id: "timberPete",
           name: "Timber Pete",
           img: "pete.png",
-          talkRadius: 100,
+          talkRadius: 150,
           spawnRadius: 3,
           offsetX: 0.25, // 0.50 is centered
           offsetY: 0.25,
@@ -504,7 +504,7 @@
           id: "minerGus",
           name: "Miner Gus",
           img: "gus.png",
-          talkRadius: 100,
+          talkRadius: 150,
           spawnRadius: 2,
           offsetX: 0.75,
           offsetY: 0.25,
@@ -520,7 +520,7 @@
           id: "rangerBramble",
           name: "Ranger Bramblefoot",
           img: "bramblefoot.png",
-          talkRadius: 100,
+          talkRadius: 150,
           spawnRadius: 1,
           offsetX: 0.50,
           offsetY: 0.20,
@@ -699,8 +699,18 @@
     const newCenterKey = `${centerGridY}_${centerGridX}`;
   
     if (currentGridCenterKey === newCenterKey) {
-      updateTreeVisibility();
-      return;
+        updateTreeVisibility();
+    
+        // check if any chopped trees should respawn
+        const now = Date.now();
+        for (const tileKey in choppedTrees) {
+            if (now - choppedTrees[tileKey] >= TREE_RESPAWN_MS) {
+                delete choppedTrees[tileKey];
+                localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+            }
+        }
+    
+        return;
     }
   
     currentGridCenterKey = newCenterKey;
@@ -722,13 +732,21 @@
         let isChopped = false;
   
         if (choppedTrees[tileKey]) {
-          if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
-            isChopped = true; // stump should appear
-          } else {
-            // Respawn tree after cooldown
-            delete choppedTrees[tileKey];
-            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-          }
+            if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
+                isChopped = true; // stump
+            } else {
+                // Prevent ghost tree: only respawn if stump marker is gone
+                const existingNode = activeTreeNodes.find(n => n.tileKey === tileKey);
+        
+                if (existingNode && existingNode.isChopped) {
+                    // stump still exists → do NOT respawn yet
+                    isChopped = true;
+                } else {
+                    // stump is gone → safe to respawn
+                    delete choppedTrees[tileKey];
+                    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+                }
+            }
         }
   
         const tileSeed = getTileRandom(tileGridX, tileGridY);
@@ -767,6 +785,8 @@
             marker: marker,
             element: treeContainer
           };
+		  
+		  treeNode.isChopped = isChopped;
   
           activeTreeNodes.push(treeNode);
   
@@ -1056,8 +1076,9 @@ function renderCutTreeCard(treeNode) {
       const npcGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
       const npcGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
   
-      if (Math.abs(npcGridX - gridX) > def.spawnRadius ||
-          Math.abs(npcGridY - gridY) > def.spawnRadius) {
+      // 9×9 grid boundary check
+      if (Math.abs(npcGridX - gridX) > 4 ||
+          Math.abs(npcGridY - gridY) > 4) {
           spawnNPC(def);
       }
   }
@@ -1182,7 +1203,7 @@ function initNPCs() {
         spawnNPC(NPC_DEFS[key]);
     }
     for (const key in QUEST_NPC_DEFS) {
-        spawnNPC(QUEST_NPC_DEFS[key]);   // ⭐ Add this
+        spawnNPC(QUEST_NPC_DEFS[key]);
     }
 
     // movement
@@ -1420,7 +1441,7 @@ function initNPCs() {
           const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
       
           // Auto-collect BEFORE opening UI
-          if (dist <= 100) {
+          if (dist <= 150) {
               collectCoin(goldNode);
               return;
           }
@@ -1433,7 +1454,7 @@ function initNPCs() {
               const distNow = Number(distRounded);
               const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
       
-              if (distNow <= 100) {
+              if (distNow <= 150) {
                   collectCoin(goldNode);
                   stopLiveDistanceUpdates();
                   return;
@@ -1442,7 +1463,7 @@ function initNPCs() {
               container.innerHTML = `
                   <b>${valueLabel}:</b> +${coinValue} Gold<br/>
                   <b>Distance:</b> ${distRounded} ft away<br/>
-                  <small style="color:#94a3b8;">Walk within 100 ft to pick up!</small>
+                  <small style="color:#94a3b8;">Walk within 150 ft to pick up!</small>
               `;
           });
       });
@@ -1754,7 +1775,7 @@ function initNPCs() {
             checkNPCProximity(NPC_DEFS[key]);
         }  
         for (const key in QUEST_NPC_DEFS) {
-            checkNPCProximity(QUEST_NPC_DEFS[key]);   // ⭐ Add this
+            checkNPCProximity(QUEST_NPC_DEFS[key]);
         }
         // AUTO-CENTER & COMPASS TRACKING
         if (autoCenterEnabled) {
