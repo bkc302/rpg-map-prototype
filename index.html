@@ -1538,12 +1538,13 @@ function initNPCs() {
 
   function updateInventoryDisplay() {
       const items = [];
+  
       if (playerInventory.has('axe')) items.push('🪓 Axe');
+      if (playerInventory.has('pick')) items.push('⛏️ Mining Pick');
       if (playerWood > 0) items.push(`🪵 Wood x${playerWood}`);
   
       const listText = items.length > 0 ? items.join(', ') : 'Empty';
   
-      // Update Inventory Panel
       document.getElementById('inv-items-list').innerText = listText;
   }
 
@@ -1778,6 +1779,13 @@ function initNPCs() {
 
                     node.isChopped = false;
                     node.element.style.pointerEvents = 'auto';
+					
+                    node.element.addEventListener('click', () => {
+                        closeBackpackIfOpen(false);
+                        clearSelectedPlot();
+                        ensureUIPanelVisible();
+                        renderTreeCard(node);
+                    });
 
                     delete choppedTrees[tileKey];
                 }
