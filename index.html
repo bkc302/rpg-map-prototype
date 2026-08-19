@@ -444,18 +444,17 @@
   let autoCenterEnabled = true;
   let compassActive = false;
   
-  let activeTarget = null;        // { type: 'tree' | 'npc' | 'coin', node: {...} }
+  let activeTarget = null;
   let distanceInterval = null;
 
   // Game Economy, Inventory & Land Ownership State
   const savedGold = localStorage.getItem('rpg_player_gold');
-  let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) : 0;
+  let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) || 0 : 0;
   
   const savedWood = localStorage.getItem('rpg_player_wood');
-  let playerWood = (savedWood !== null) ? parseInt(savedWood, 10) : 0;
+  let playerWood = (savedWood !== null) ? parseInt(savedWood, 10) || 0 : 0;
   
   const PLOT_PRICE = 100;
-  const AXE_PRICE = 20;
   const TREE_CUT_RADIUS_FEET = 150;
   const TREE_RESPAWN_MS = 5 * 60 * 1000; // 5 Minutes
   
@@ -492,7 +491,7 @@
           img: "pete.png",
           talkRadius: 150,
           spawnRadius: 3,
-          offsetX: 0.25, // 0.50 is centered
+          offsetX: 0.25,
           offsetY: 0.25,
           tradeItem: "axe",
           tradeType: "gold",
@@ -528,7 +527,7 @@
           quests: [
               {
                   questId: "bramble_intro_quest",
-                  requiredItems: ["axe"],   // axe is the final requirement
+                  requiredItems: ["axe"],
                   rewardGold: 20,
                   rewardItems: [],
                   disappearOnComplete: false,
@@ -543,7 +542,7 @@
   
               {
                   questId: "bramble_second_quest",
-                  requiredItems: ["mining pick"], // mining pick is the final requirement
+                  requiredItems: ["mining pick"],
                   rewardGold: 30,
                   rewardItems: [],
                   disappearOnComplete: false,
@@ -570,7 +569,7 @@
 
   // Tree Decoration System
   let activeTreeNodes = [];
-  let currentGridCenterKey = null; // Tracks player grid center to avoid unnecessary tree respawns
+  let currentGridCenterKey = null;
 
   let wakeLock = null;
   async function requestWakeLock() {
@@ -602,7 +601,7 @@
 
   map.addControl(geolocate);
 
-  // Player Marker Construction using <img> with onerror fallback
+  // Player Marker
   const playerContainer = document.createElement('div');
   playerContainer.className = 'player-marker-container';
 
@@ -618,7 +617,7 @@
 
   // Global degree steps
   const LAT_GRID_SIZE_DEG = 0.00045; // Fixed height (~50m)
-  let LNG_GRID_SIZE_DEG = 0.00045;   // Calculated ONCE on startup for 1:1 square ratio
+  let LNG_GRID_SIZE_DEG = 0.00045;
   let gridInitialized = false;
   
   function initGridScaling(lat) {
@@ -635,21 +634,18 @@
     };
   }
 
-  // Returns distance in feet instead of meters
   function getDistanceFeet(lat1, lon1, lat2, lon2) {
-    const R = 6371000; // Radius of Earth in meters
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    
-    return distanceMeters * 3.28084; // Convert meters to feet
+    return distanceMeters * 3.28084;
   }
   
   function startLiveDistanceUpdates(targetType, targetNode, renderFn) {
-      // Stop any previous interval
       if (distanceInterval) clearInterval(distanceInterval);
   
       activeTarget = { type: targetType, node: targetNode };
@@ -664,11 +660,11 @@
               targetNode.lng
           ).toFixed(0);
   
-          renderFn(dist);  // Call the specific renderer (tree, npc, coin)
+          renderFn(dist);
       }
   
-      update(); // Run immediately
-      distanceInterval = setInterval(update, 1000); // Update every second
+      update();
+      distanceInterval = setInterval(update, 1000);
   }
   
   function stopLiveDistanceUpdates() {
@@ -683,15 +679,12 @@
     activeTreeNodes = [];
   }
 
-  // Simple deterministic pseudo-random generator based on tile grid coordinates
   function getTileRandom(gridX, gridY) {
-    // Hash two integer grid coordinates into a fixed float between 0.0 and 1.0
     let hash = Math.sin(gridX * 12.9898 + gridY * 78.233) * 43758.5453123;
     return hash - Math.floor(hash);
   }
   
-
-  // Spawns trees deterministically across the 9x9 grid, respecting chopped respawn timers
+  // Spawns trees deterministically across the 9x9 grid
   function spawnTrees() {
     if (!userLat || !userLng) return;
   
@@ -718,24 +711,15 @@
         const tileGridY = centerGridY + y;
         const tileKey = `${tileGridY}_${tileGridX}`;
   
-        // Determine if tree should be stump or full tree
         let isChopped = false;
   
         if (choppedTrees[tileKey]) {
             if (now - choppedTrees[tileKey] < TREE_RESPAWN_MS) {
-                isChopped = true; // stump
+                isChopped = true;
             } else {
-                // Prevent ghost tree: only respawn if stump marker is gone
-                const existingNode = activeTreeNodes.find(n => n.tileKey === tileKey);
-        
-                if (existingNode && existingNode.isChopped) {
-                    // stump still exists → do NOT respawn yet
-                    isChopped = true;
-                } else {
-                    // stump is gone → safe to respawn
-                    delete choppedTrees[tileKey];
-                    localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-                }
+                // Timer expired – allow respawn
+                delete choppedTrees[tileKey];
+                localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
             }
         }
   
@@ -752,8 +736,6 @@
   
           const treeImg = document.createElement('img');
           treeImg.className = 'tree-marker-icon';
-  
-          // Use isChopped flag to decide image
           treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
   
           treeContainer.appendChild(treeImg);
@@ -763,7 +745,6 @@
             anchor: 'center'
           }).setLngLat([treeLng, treeLat]).addTo(map);
   		
-  		// Disable clicking on stump
           if (isChopped) {
               treeContainer.style.pointerEvents = "none";
           }
@@ -773,22 +754,18 @@
             lat: treeLat,
             lng: treeLng,
             marker: marker,
-            element: treeContainer
+            element: treeContainer,
+            isChopped: isChopped
           };
-		  
-		  treeNode.isChopped = isChopped;
   
           activeTreeNodes.push(treeNode);
   
-          // Prevent map click-through
-  		treeContainer.addEventListener('click', (e) => {
-  		  e.stopPropagation();
-  		});
-  
-          // Open tree card
-          treeContainer.addEventListener('click', () => {
-  		  closeBackpackIfOpen(false);
-		    clearSelectedPlot();
+          // Single clean click handler
+          treeContainer.addEventListener('click', (e) => {
+  		    e.stopPropagation();
+            if (treeNode.isChopped) return;
+            closeBackpackIfOpen(false);
+            clearSelectedPlot();
             ensureUIPanelVisible();
             renderTreeCard(treeNode);
           });
@@ -797,17 +774,17 @@
     }
   }
   
-function renderTreeCard(treeNode) {
+  function renderTreeCard(treeNode) {
     const container = document.getElementById('plot-info');
 
-    // Prevent Chop button on chopped trees
     if (treeNode.isChopped) {
         renderCutTreeCard(treeNode);
         return;
     }
 
     startLiveDistanceUpdates("tree", treeNode, (dist) => {
-        const inRange = dist <= TREE_CUT_RADIUS_FEET;
+        const distNum = Number(dist);
+        const inRange = distNum <= TREE_CUT_RADIUS_FEET;
         const hasAxe = playerInventory.has('axe');
 
         if (!hasAxe) {
@@ -838,12 +815,11 @@ function renderTreeCard(treeNode) {
             startChopCountdown(treeNode);
         });
     });
-}
+  }
 
-function chopTree(treeNode) {
+  function chopTree(treeNode) {
     if (!playerInventory.has('axe')) return;
 
-    // Weighted wood yield (1 common -> 5 rare)
     const woodWeights = [1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5];
     const woodYield = woodWeights[Math.floor(Math.random() * woodWeights.length)];
 
@@ -851,17 +827,13 @@ function chopTree(treeNode) {
     localStorage.setItem('rpg_player_wood', playerWood);
     updateInventoryDisplay();
 
-    // Mark tree as chopped with current timestamp
     choppedTrees[treeNode.tileKey] = Date.now();
     localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
 
-    // mark node as chopped
     treeNode.isChopped = true;
 
-    // Remove old tree marker
     treeNode.marker.remove();
 
-    // Create cut-tree marker
     const cutContainer = document.createElement('div');
     cutContainer.className = 'tree-marker-container';
 
@@ -875,30 +847,26 @@ function chopTree(treeNode) {
         anchor: 'center'
     }).setLngLat([treeNode.lng, treeNode.lat]).addTo(map);
 
-    // Disable clicking on stump
     cutContainer.style.pointerEvents = "none";
 
-    // Update existing node
     treeNode.marker = cutMarker;
     treeNode.element = cutContainer;
 
     const yieldText = woodYield === 5 ? '🪵 Cut +5 Wood!' : `🪵 Cut +${woodYield} Wood!`;
     document.getElementById('status').innerText = yieldText;
 
-    // immediately show stump UI so Chop button disappears
     renderCutTreeCard(treeNode);
-}
+  }
 
-function renderCutTreeCard(treeNode) {
+  function renderCutTreeCard(treeNode) {
     const container = document.getElementById('plot-info');
     container.innerHTML = `
         <b>🌳 Tree Stump</b><br/>
         <span style="color:#a855f7;">This tree has been chopped.</span><br/>
         <small style="color:#94a3b8;">Respawns in 5 minutes.</small>
     `;
-}  
+  }
   
-  // Toggles tree visibility so they are only displayed at 17.5 and above
   function updateTreeVisibility() {
     const isVisible = map.getZoom() >= 17.5;
     activeTreeNodes.forEach(node => {
@@ -909,15 +877,29 @@ function renderCutTreeCard(treeNode) {
   let chopInterval = null;
   let chopCancelCheck = null;
 
+  function cancelAnyActiveChop() {
+    if (chopInterval) {
+      clearInterval(chopInterval);
+      chopInterval = null;
+    }
+    if (chopCancelCheck) {
+      clearInterval(chopCancelCheck);
+      chopCancelCheck = null;
+    }
+    const progressBox = document.getElementById('chop-progress');
+    if (progressBox) progressBox.style.display = 'none';
+  }
+
   function startChopCountdown(treeNode) {
     stopLiveDistanceUpdates();
+    cancelAnyActiveChop();
+
     const container = document.getElementById('plot-info');
     const progressBox = document.getElementById('chop-progress');
     const progressBar = document.getElementById('chop-progress-bar');
 
     let secondsLeft = 5;
 
-    // Show progress bar
     progressBox.style.display = 'block';
     progressBar.style.width = '100%';
 
@@ -926,26 +908,23 @@ function renderCutTreeCard(treeNode) {
       <small>Stay within range for 5 seconds!</small>
     `;
 
-    // Play chop sound immediately
-    chopSound.play();
+    chopSound.play().catch(() => {});
 
-    // Play sound every second + shrink bar
     chopInterval = setInterval(() => {
         secondsLeft--;
 
-        // Shrink bar (reverse loading)
         const percent = (secondsLeft / 5) * 100;
         progressBar.style.width = percent + '%';
 
-        chopSound.play();
+        chopSound.play().catch(() => {});
 
         if (secondsLeft <= 0) {
             finishChop(treeNode);
         }
     }, 1000);
 
-    // Check if player walks away
     chopCancelCheck = setInterval(() => {
+        if (!userLat || !userLng) return;
         const dist = getDistanceFeet(userLat, userLng, treeNode.lat, treeNode.lng);
 
         if (dist > TREE_CUT_RADIUS_FEET) {
@@ -955,10 +934,7 @@ function renderCutTreeCard(treeNode) {
   }
   
   function cancelChop() {
-    clearInterval(chopInterval);
-    clearInterval(chopCancelCheck);
-
-    document.getElementById('chop-progress').style.display = 'none';
+    cancelAnyActiveChop();
 
     document.getElementById('plot-info').innerHTML = `
       <b>❌ Chop Cancelled</b><br/>
@@ -967,13 +943,8 @@ function renderCutTreeCard(treeNode) {
   }
   
   function finishChop(treeNode) {
-      clearInterval(chopInterval);
-      clearInterval(chopCancelCheck);
-  
-      document.getElementById('chop-progress').style.display = 'none';
-  
+      cancelAnyActiveChop();
       stopLiveDistanceUpdates();
-  
       chopTree(treeNode);
   }
   
@@ -982,7 +953,6 @@ function renderCutTreeCard(treeNode) {
       if (disabled) return;
       if (!userLat || !userLng) return;
   
-      // Remove old marker if exists
       if (npcNodes[def.id]?.marker) {
           npcNodes[def.id].marker.remove();
       }
@@ -1018,6 +988,7 @@ function renderCutTreeCard(treeNode) {
   
       container.addEventListener("click", (e) => {
           e.stopPropagation();
+          cancelAnyActiveChop();
           clearSelectedPlot();
           closeBackpackIfOpen(false);
           ensureUIPanelVisible();
@@ -1029,10 +1000,9 @@ function renderCutTreeCard(treeNode) {
       const node = npcNodes[def.id];
       if (!node || !userLat || !userLng) return;
   
-      // Prevent frustration: NPC does NOT move if player is close
       const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
       if (dist <= def.talkRadius + 50) {
-          return; // Player is close → freeze movement
+          return;
       }
   
       const { gridX, gridY } = latLngToGrid(userLat, userLng);
@@ -1066,7 +1036,6 @@ function renderCutTreeCard(treeNode) {
       const npcGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
       const npcGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
   
-      // 9×9 grid boundary check
       if (Math.abs(npcGridX - gridX) > 4 ||
           Math.abs(npcGridY - gridY) > 4) {
           spawnNPC(def);
@@ -1074,25 +1043,19 @@ function renderCutTreeCard(treeNode) {
   }
   
   function initNPCMovement() {
-      const FOUR_MINUTES_MS = 4 * 60 * 1000; // 4 minutes
-	  //const FOUR_MINUTES_MS = 10 * 1000;   // for dev testing: 10 seconds
+      const FOUR_MINUTES_MS = 4 * 60 * 1000;
   
       setInterval(() => {
-          // Move merchant NPCs
           for (const key in NPC_DEFS) {
               moveNPC(NPC_DEFS[key]);
           }
-  
-          // Move quest NPCs
           for (const key in QUEST_NPC_DEFS) {
               moveNPC(QUEST_NPC_DEFS[key]);
           }
-  
       }, FOUR_MINUTES_MS);
   }
 
   function renderNPCCard(def) {
-      // If this NPC is a quest NPC, use quest logic instead
       if (QUEST_NPC_DEFS[def.id]) {
           renderQuestNPC(QUEST_NPC_DEFS[def.id]);
           return;
@@ -1128,7 +1091,6 @@ function renderCutTreeCard(treeNode) {
               canAfford = playerWood >= def.price;
               requirementLabel = `${def.price} Wood`;
           }
-          const disabledAttr = canAfford ? "" : "disabled";
   
           container.innerHTML = `
               <b>${def.name}:</b><br/>
@@ -1149,11 +1111,8 @@ function renderCutTreeCard(treeNode) {
   }
 
   function buyNPCItem(def) {
-  
-      // Prevent duplicate purchases
       if (playerInventory.has(def.tradeItem)) return;
   
-      // Resource check + deduction
       if (def.tradeType === "gold") {
           if (playerGold < def.price) return;
           playerGold -= def.price;
@@ -1164,15 +1123,12 @@ function renderCutTreeCard(treeNode) {
           playerWood -= def.price;
       }
   
-      // Add item to inventory
       playerInventory.add(def.tradeItem);
   
-      // Save updated resources
       localStorage.setItem('rpg_player_gold', playerGold);
       localStorage.setItem('rpg_player_wood', playerWood);
       localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
   
-      // Disable this NPC forever
       localStorage.setItem(def.disabledKey, "true");
   
       npcNodes[def.id]?.marker?.remove();
@@ -1188,27 +1144,6 @@ function renderCutTreeCard(treeNode) {
       `;
   }
   
-function initNPCs() {
-    for (const key in NPC_DEFS) {
-        spawnNPC(NPC_DEFS[key]);
-    }
-    for (const key in QUEST_NPC_DEFS) {
-        spawnNPC(QUEST_NPC_DEFS[key]);
-    }
-
-    // movement
-    setInterval(() => {
-        for (const key in NPC_DEFS) moveNPC(NPC_DEFS[key]);
-        for (const key in QUEST_NPC_DEFS) moveNPC(QUEST_NPC_DEFS[key]);
-    }, 4 * 60 * 1000);
-
-    // proximity
-    setInterval(() => {
-        for (const key in NPC_DEFS) checkNPCProximity(NPC_DEFS[key]);
-        for (const key in QUEST_NPC_DEFS) checkNPCProximity(QUEST_NPC_DEFS[key]);
-    }, 2000);
-}
-  
   function isQuestComplete(questId) {
       return questState[questId] === true;
   }
@@ -1222,10 +1157,18 @@ function initNPCs() {
       const container = document.getElementById("plot-info");
       const node = npcNodes[def.id];
   
+      if (!node) {
+          container.innerHTML = `<b>${def.name}:</b><br/><small style="color:#94a3b8;">They are no longer around.</small>`;
+          return;
+      }
+  
       stopLiveDistanceUpdates();
   
+      // Guard so reward only happens once while the card is open
+      let rewardGivenThisSession = false;
+  
       startLiveDistanceUpdates("npc", node, (dist) => {
-          const inRange = dist <= def.talkRadius;
+          const inRange = Number(dist) <= def.talkRadius;
   
           if (!inRange) {
               container.innerHTML = `
@@ -1236,10 +1179,8 @@ function initNPCs() {
               return;
           }
   
-          //  Find the first quest that is NOT complete
           const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
   
-          //  If all quests are complete
           if (!nextQuest) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
@@ -1249,8 +1190,6 @@ function initNPCs() {
           }
   
           const dialog = nextQuest.dialog;
-  
-          //  Check required items
           const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
   
           if (!hasAllItems) {
@@ -1264,28 +1203,31 @@ function initNPCs() {
               return;
           }
   
-          //  Reward logic
-          playerGold += nextQuest.rewardGold;
-          updateGoldDisplay();
-          localStorage.setItem("rpg_player_gold", playerGold);
+          // Reward only once
+          if (!rewardGivenThisSession) {
+              rewardGivenThisSession = true;
   
-          for (const item of nextQuest.rewardItems) {
-              playerInventory.add(item);
+              playerGold += nextQuest.rewardGold;
+              updateGoldDisplay();
+              localStorage.setItem("rpg_player_gold", playerGold);
+  
+              for (const item of nextQuest.rewardItems) {
+                  playerInventory.add(item);
+              }
+              localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+  
+              completeQuest(nextQuest.questId);
+  
+              if (nextQuest.disappearOnComplete && node.marker) {
+                  node.marker.remove();
+                  npcNodes[def.id] = null;
+              }
           }
-          localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
-  
-          completeQuest(nextQuest.questId);
   
           container.innerHTML = `
               <b>${def.name}:</b><br/>
               <i>${dialog.ready}</i>
           `;
-  
-          //  Disappear logic (per quest)
-          if (nextQuest.disappearOnComplete) {
-              node.marker.remove();
-              npcNodes[def.id] = null;
-          }
       });
   }
   
@@ -1293,12 +1235,10 @@ function initNPCs() {
       if (node.isCollecting) return;
       node.isCollecting = true;
   
-      // Play sound
       const sound = coinAudio.cloneNode();
       sound.volume = 0.6;
       sound.play().catch(() => {});
   
-      // Magnet animation
       const startLng = node.lng;
       const startLat = node.lat;
       const startTime = performance.now();
@@ -1320,7 +1260,6 @@ function initNPCs() {
           if (progress < 1) {
               requestAnimationFrame(pullAnimation);
           } else {
-              // Finalize pickup
               playerGold += node.value;
               localStorage.setItem('rpg_player_gold', playerGold);
               updateGoldDisplay();
@@ -1424,13 +1363,12 @@ function initNPCs() {
   
       goldContainer.addEventListener('click', (e) => {
           e.stopPropagation();
-      
+          cancelAnyActiveChop();
           clearSelectedPlot();
           closeBackpackIfOpen(false);
       
           const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
       
-          // Auto-collect BEFORE opening UI
           if (dist <= 150) {
               collectCoin(goldNode);
               return;
@@ -1463,7 +1401,7 @@ function initNPCs() {
   }
 
   function initCoinSpawns() {
-    const initialCount = Math.floor(Math.random() * 5) + 8; // Spawns 8, 9, 10, 11, or 12
+    const initialCount = Math.floor(Math.random() * 5) + 8;
     for (let i = 0; i < initialCount; i++) {
       spawnSingleCoin();
     }
@@ -1473,14 +1411,12 @@ function initNPCs() {
   function checkCoinProximity() {
       for (let i = activeGoldNodes.length - 1; i >= 0; i--) {
           const node = activeGoldNodes[i];
-  
-          // Skip coins currently in the middle of being pulled
           if (node.isCollecting) continue;
   
           const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
   
           if (dist <= PICKUP_RADIUS_FEET) {
-              collectCoin(node);   // unified auto-collect
+              collectCoin(node);
           }
       }
   }
@@ -1532,7 +1468,6 @@ function initNPCs() {
   }
 
   function updateGoldDisplay() {
-      // Inventory Panel
       document.getElementById('inv-gold-amount').innerText = playerGold;
   }
 
@@ -1540,7 +1475,7 @@ function initNPCs() {
       const items = [];
   
       if (playerInventory.has('axe')) items.push('🪓 Axe');
-      if (playerInventory.has('pick')) items.push('⛏️ Mining Pick');
+      if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
       if (playerWood > 0) items.push(`🪵 Wood x${playerWood}`);
   
       const listText = items.length > 0 ? items.join(', ') : 'Empty';
@@ -1631,7 +1566,7 @@ function initNPCs() {
   
   function clearSelectedPlot() {
       selectedPlotId = null;
-      refreshMapGrid();   // rebuilds features → removes red outline
+      refreshMapGrid();
   }
 
   // UI & GEOLOCATION EVENT LISTENERS
@@ -1644,7 +1579,6 @@ function initNPCs() {
           localStorage.removeItem('rpg_player_inventory');
           localStorage.removeItem('rpg_chopped_trees');
   
-          // RESET QUESTS
           localStorage.removeItem("rpg_quest_state");
           questState = {};
   
@@ -1663,7 +1597,7 @@ function initNPCs() {
           currentGridCenterKey = null;
           spawnTrees();
   
-          // Reset ALL NPC states
+          // Reset merchant NPCs
           for (const key in NPC_DEFS) {
               const def = NPC_DEFS[key];
               localStorage.removeItem(def.disabledKey);
@@ -1671,13 +1605,24 @@ function initNPCs() {
               if (npcNodes[def.id]?.marker) {
                   npcNodes[def.id].marker.remove();
               }
-  
               npcNodes[def.id] = null;
           }
   
-          // Respawn merchant NPCs immediately
+          // Reset & respawn quest NPCs
+          for (const key in QUEST_NPC_DEFS) {
+              const def = QUEST_NPC_DEFS[key];
+              if (npcNodes[def.id]?.marker) {
+                  npcNodes[def.id].marker.remove();
+              }
+              npcNodes[def.id] = null;
+          }
+  
+          // Respawn everyone
           for (const key in NPC_DEFS) {
               spawnNPC(NPC_DEFS[key]);
+          }
+          for (const key in QUEST_NPC_DEFS) {
+              spawnNPC(QUEST_NPC_DEFS[key]);
           }
   
           alert("Save data cleared!");
@@ -1703,6 +1648,7 @@ function initNPCs() {
       document.getElementById('toggle-ui-btn').style.display = 'block';
       document.getElementById('inventory-btn').style.display = 'block';
   
+      cancelAnyActiveChop();
       stopLiveDistanceUpdates();
   });
   
@@ -1711,6 +1657,7 @@ function initNPCs() {
       document.getElementById('toggle-ui-btn').style.display = 'none';
       document.getElementById('inventory-btn').style.display = 'none';
   
+      cancelAnyActiveChop();
       stopLiveDistanceUpdates();
   });
   
@@ -1719,6 +1666,7 @@ function initNPCs() {
       document.getElementById('inventory-btn').style.display = 'none';
       document.getElementById('toggle-ui-btn').style.display = 'none';
   
+      cancelAnyActiveChop();
       stopLiveDistanceUpdates();
   });
   
@@ -1727,6 +1675,7 @@ function initNPCs() {
       document.getElementById('inventory-btn').style.display = 'block';
       document.getElementById('toggle-ui-btn').style.display = 'block';
   
+      cancelAnyActiveChop();
       stopLiveDistanceUpdates();
   });
 
@@ -1734,7 +1683,6 @@ function initNPCs() {
   geolocate.on('geolocate', (e) => {
       userLat = e.coords.latitude;
       userLng = e.coords.longitude;
-      const heading = e.coords.heading; // GPS movement heading (valid while walking)
       
       initGridScaling(userLat);    
       requestWakeLock();
@@ -1757,30 +1705,38 @@ function initNPCs() {
 		spawnNPC(QUEST_NPC_DEFS.rangerBramble);
         initNPCMovement();
 
-        //TREE RESPAWN HEARTBEAT
+        // TREE RESPAWN HEARTBEAT
         setInterval(() => {
             const now = Date.now();
 
             for (const tileKey in choppedTrees) {
                 if (now - choppedTrees[tileKey] >= TREE_RESPAWN_MS) {
 
-                    // Find the active stump node
                     const node = activeTreeNodes.find(n => n.tileKey === tileKey);
 
                     if (!node) {
-                        // Stump not visible → just clear chopped state
                         delete choppedTrees[tileKey];
                         continue;
                     }
 
-                    // Turn stump back into a tree
+                    // Turn stump back into a tree (no listener stacking)
                     const img = node.element.querySelector('.tree-marker-icon');
                     if (img) img.src = 'tree.png';
 
                     node.isChopped = false;
                     node.element.style.pointerEvents = 'auto';
-					
-                    node.element.addEventListener('click', () => {
+
+                    // Cleanly replace element so old listeners are gone
+                    const newElement = node.element.cloneNode(true);
+                    if (node.element.parentNode) {
+                        node.element.parentNode.replaceChild(newElement, node.element);
+                    }
+                    node.element = newElement;
+
+                    // Re-attach a single clean click handler
+                    newElement.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (node.isChopped) return;
                         closeBackpackIfOpen(false);
                         clearSelectedPlot();
                         ensureUIPanelVisible();
@@ -1806,16 +1762,13 @@ function initNPCs() {
         for (const key in QUEST_NPC_DEFS) {
             checkNPCProximity(QUEST_NPC_DEFS[key]);
         }
-        // AUTO-CENTER & COMPASS TRACKING
         if (autoCenterEnabled) {
           if (compassActive) {
-            // Instantly snap map center to player without triggering animations that gyro cancels
             map.jumpTo({
               center: [userLng, userLat],
               zoom: 17.95
             });
           } else {
-            // Compass OFF: Smoothly center and lock North-Up (bearing: 0)
             map.easeTo({ 
               center: [userLng, userLat], 
               bearing: 0,
@@ -1881,7 +1834,6 @@ function initNPCs() {
       paint: { 'fill-color': '#000000', 'fill-opacity': 0 }
     });
 
-	//MAIN PLOT/GRID OUTLINES
     map.addLayer({
       id: 'plots-outline',
       type: 'line',
@@ -1890,7 +1842,6 @@ function initNPCs() {
       paint: { 'line-color': '#1e293b', 'line-width': 2, 'line-opacity': 0.7 }
     });
 
-    //RED OUTLINE FOR SELECTED PLOT
     map.addLayer({
       id: 'plots-selected-outline',
       type: 'line',
@@ -1899,7 +1850,6 @@ function initNPCs() {
       paint: { 'line-color': '#ef4444', 'line-width': 4, 'line-opacity': 1.0 }
     });
 
-	//YELLOW OUTLINE FOR CLAIMED/OWNED PLOTS
     map.addLayer({
       id: 'plots-claimed-outline',
       type: 'line',
@@ -1908,14 +1858,14 @@ function initNPCs() {
       paint: { 'line-color': '#eab308', 'line-width': 4, 'line-opacity': 1.0 }
     });
 
-    // Update tree visibility dynamically as zoom changes
     map.on('zoom', updateTreeVisibility);
 
     map.on('dragstart', () => {
       if (autoCenterEnabled || compassActive) {
         autoCenterEnabled = false;
         compassActive = false;
-        compassBtn.classList.remove('active');
+        if (compassBtn) compassBtn.classList.remove('active');
+        window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
         window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
         updateAutoCenterUI();
       }
@@ -1930,6 +1880,7 @@ function initNPCs() {
 
     map.on('click', 'plots-fill', (e) => {
       if (e.features.length > 0) {
+	    cancelAnyActiveChop();
 	    stopLiveDistanceUpdates();
 	    closeBackpackIfOpen(false);
         selectedPlotId = e.features[0].properties.plotId;
@@ -1953,9 +1904,8 @@ function initNPCs() {
     function getHeadingDegrees(event) {
       let heading = null;
       if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
-        heading = event.webkitCompassHeading; // iOS
+        heading = event.webkitCompassHeading;
       } else if (event.alpha !== null && event.alpha !== undefined) {
-        // Android / Standard Chrome calculation
         heading = (360 - event.alpha + getScreenOrientationAngle()) % 360;
       }
       return heading;
@@ -1988,7 +1938,6 @@ function initNPCs() {
       compassNeedle.style.transform = `rotate(${-bearing}deg)`;
     }
 
-    // Keep compass needle facing physical North whenever map rotates
     map.on('rotate', updateCompassUI);
 
     if (compassBtn) {
@@ -2014,14 +1963,12 @@ function initNPCs() {
 
           compassBtn.classList.add('active');
 
-          // Prefer absolute orientation on Android if available
           if ('ondeviceorientationabsolute' in window) {
             window.addEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
           } else {
             window.addEventListener('deviceorientation', handleDeviceOrientation, true);
           }
         } else {
-          // OFF / RESET: Remove listeners and ease map back to 0° North
           compassBtn.classList.remove('active');
           window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
           window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
@@ -2035,7 +1982,6 @@ function initNPCs() {
         }
       });
     }
-    // ------------------------------------
 
     if (userLat && userLng) {
       refreshMapGrid();
