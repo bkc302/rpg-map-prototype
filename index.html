@@ -700,23 +700,6 @@
   
     if (currentGridCenterKey === newCenterKey) {
         updateTreeVisibility();
-    
-        // check if any chopped trees should respawn
-        const now = Date.now();
-        let needsRefresh = false;
-    
-        for (const tileKey in choppedTrees) {
-            if (now - choppedTrees[tileKey] >= TREE_RESPAWN_MS) {
-                delete choppedTrees[tileKey];
-                needsRefresh = true;
-            }
-        }
-    
-        if (needsRefresh) {
-            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
-            spawnTrees();
-        }
-    
         return;
     }
   
@@ -1771,7 +1754,38 @@ function initNPCs() {
         spawnNPC(NPC_DEFS.timberPete);
 		spawnNPC(NPC_DEFS.minerGus);
 		spawnNPC(QUEST_NPC_DEFS.rangerBramble);
-        initNPCMovement();    
+        initNPCMovement();
+
+        //TREE RESPAWN HEARTBEAT
+        setInterval(() => {
+            const now = Date.now();
+
+            for (const tileKey in choppedTrees) {
+                if (now - choppedTrees[tileKey] >= TREE_RESPAWN_MS) {
+
+                    // Find the active stump node
+                    const node = activeTreeNodes.find(n => n.tileKey === tileKey);
+
+                    if (!node) {
+                        // Stump not visible → just clear chopped state
+                        delete choppedTrees[tileKey];
+                        continue;
+                    }
+
+                    // Turn stump back into a tree
+                    const img = node.element.querySelector('.tree-marker-icon');
+                    if (img) img.src = 'tree.png';
+
+                    node.isChopped = false;
+                    node.element.style.pointerEvents = 'auto';
+
+                    delete choppedTrees[tileKey];
+                }
+            }
+
+            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+        }, 5000);
+		
         map.jumpTo({ center: [userLng, userLat], zoom: 17.95 });
       } else {
         playerMarker.setLngLat([userLng, userLat]);
