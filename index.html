@@ -590,7 +590,7 @@
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [0, 0],
     zoom: 2,
-	maxZoom: 18
+	maxZoom: 17.95
   });
 
   const geolocate = new maplibregl.GeolocateControl({
@@ -703,11 +703,18 @@
     
         // check if any chopped trees should respawn
         const now = Date.now();
+        let needsRefresh = false;
+    
         for (const tileKey in choppedTrees) {
             if (now - choppedTrees[tileKey] >= TREE_RESPAWN_MS) {
                 delete choppedTrees[tileKey];
-                localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+                needsRefresh = true;
             }
+        }
+    
+        if (needsRefresh) {
+            localStorage.setItem('rpg_chopped_trees', JSON.stringify(choppedTrees));
+            spawnTrees();
         }
     
         return;
@@ -908,7 +915,7 @@ function renderCutTreeCard(treeNode) {
     `;
 }  
   
-  // Toggles tree visibility so they are only displayed at zoom level >= 18
+  // Toggles tree visibility so they are only displayed at 17.5 and above
   function updateTreeVisibility() {
     const isVisible = map.getZoom() >= 17.5;
     activeTreeNodes.forEach(node => {
@@ -1702,7 +1709,7 @@ function initNPCs() {
     autoCenterEnabled = !autoCenterEnabled;
     updateAutoCenterUI();
     if (autoCenterEnabled && userLat && userLng) {
-      map.flyTo({ center: [userLng, userLat], zoom: 18, essential: true });
+      map.flyTo({ center: [userLng, userLat], zoom: 17.95, essential: true });
     }
   });
   
@@ -1765,7 +1772,7 @@ function initNPCs() {
 		spawnNPC(NPC_DEFS.minerGus);
 		spawnNPC(QUEST_NPC_DEFS.rangerBramble);
         initNPCMovement();    
-        map.jumpTo({ center: [userLng, userLat], zoom: 18 });
+        map.jumpTo({ center: [userLng, userLat], zoom: 17.95 });
       } else {
         playerMarker.setLngLat([userLng, userLat]);
         refreshMapGrid();
@@ -1783,7 +1790,7 @@ function initNPCs() {
             // Instantly snap map center to player without triggering animations that gyro cancels
             map.jumpTo({
               center: [userLng, userLat],
-              zoom: 18
+              zoom: 17.95
             });
           } else {
             // Compass OFF: Smoothly center and lock North-Up (bearing: 0)
@@ -1791,7 +1798,7 @@ function initNPCs() {
               center: [userLng, userLat], 
               bearing: 0,
               pitch: 0,
-              zoom: 18, 
+              zoom: 17.95, 
               duration: 500, 
               essential: true 
             });
@@ -1942,12 +1949,12 @@ function initNPCs() {
                 map.jumpTo({
                     center: [userLng, userLat],
                     bearing: heading,
-                    zoom: 18
+                    zoom: 17.95
                 });
             } else {
                 map.rotateTo(heading, { 
                     duration: 50,
-                    zoom: 18
+                    zoom: 17.95
                 });
             }
         }
