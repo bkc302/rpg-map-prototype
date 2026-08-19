@@ -923,7 +923,8 @@
       <small>Stay within range for 5 seconds!</small>
     `;
 
-    chopSound.play().catch(() => {});
+    const sfx = chopSound.cloneNode();
+    sfx.play().catch(() => {});
 
     chopInterval = setInterval(() => {
         secondsLeft--;
@@ -931,7 +932,8 @@
         const percent = (secondsLeft / 5) * 100;
         progressBar.style.width = percent + '%';
 
-        chopSound.play().catch(() => {});
+        const sfx = chopSound.cloneNode();
+        sfx.play().catch(() => {});
 
         if (secondsLeft <= 0) {
             finishChop(treeNode);
@@ -1726,7 +1728,7 @@
       userLng = e.coords.longitude;
       
       initGridScaling(userLat);    
-      requestWakeLock();
+      if (!wakeLock) requestWakeLock();
       cleanupDistantCoins();    
       if (!gameStarted) {
         gameStarted = true;
@@ -1763,27 +1765,8 @@
                     // Turn stump back into a tree (no listener stacking)
                     const img = node.element.querySelector('.tree-marker-icon');
                     if (img) img.src = 'tree.png';
-
                     node.isChopped = false;
                     node.element.style.pointerEvents = 'auto';
-
-                    // Cleanly replace element so old listeners are gone
-                    const newElement = node.element.cloneNode(true);
-                    if (node.element.parentNode) {
-                        node.element.parentNode.replaceChild(newElement, node.element);
-                    }
-                    node.element = newElement;
-
-                    // Re-attach a single clean click handler
-                    newElement.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (node.isChopped) return;
-                        closeBackpackIfOpen(false);
-                        clearSelectedPlot();
-                        ensureUIPanelVisible();
-                        renderTreeCard(node);
-                    });
-
                     delete choppedTrees[tileKey];
                 }
             }
