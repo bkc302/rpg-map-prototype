@@ -157,6 +157,21 @@
 	border-bottom: 1px solid #30363d;
 	}
 	
+    .gold-popup-text {
+      color: #ffd700;
+      font-weight: bold;
+      font-size: 18px;
+      white-space: nowrap;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.9), 0 0 4px black;
+      animation: goldFloatUp 1.2s ease-out forwards;
+      pointer-events: none;
+    }
+    
+    @keyframes goldFloatUp {
+      0%   { transform: translateY(0);    opacity: 1; }
+      100% { transform: translateY(-70px); opacity: 0; }
+    }
+	
     .ui-button {
       width: 180px;        /* wider */
       height: 46px;        /* consistent height */
@@ -1210,6 +1225,7 @@
               playerGold += nextQuest.rewardGold;
               updateGoldDisplay();
               localStorage.setItem("rpg_player_gold", playerGold);
+			  showGoldPopup(nextQuest.rewardGold);
   
               for (const item of nextQuest.rewardItems) {
                   playerInventory.add(item);
@@ -1229,6 +1245,30 @@
               <i>${dialog.ready}</i>
           `;
       });
+  }
+  
+  function showGoldPopup(amount) {
+    if (!userLat || !userLng) return;
+  
+    // Wrapper handles positioning (maplibre sets transform on this),
+    // inner text handles the float/fade animation separately so they don't conflict.
+    const wrapper = document.createElement('div');
+    wrapper.style.pointerEvents = 'none';
+  
+    const text = document.createElement('div');
+    text.className = 'gold-popup-text';
+    text.innerText = `+${amount} Gold`;
+    wrapper.appendChild(text);
+  
+    const popupMarker = new maplibregl.Marker({
+      element: wrapper,
+      anchor: 'bottom',
+      offset: [0, -40] // nudges it up above the player icon
+    })
+      .setLngLat([userLng, userLat])
+      .addTo(map);
+  
+    setTimeout(() => popupMarker.remove(), 1200);
   }
   
   function collectCoin(node) {
@@ -1263,6 +1303,7 @@
               playerGold += node.value;
               localStorage.setItem('rpg_player_gold', playerGold);
               updateGoldDisplay();
+			  showGoldPopup(node.value);
   
               const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
               document.getElementById('status').innerText =
