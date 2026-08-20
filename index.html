@@ -703,6 +703,7 @@
   // Spawns trees deterministically across the 9x9 grid
   function spawnTrees() {
     if (!userLat || !userLng) return;
+	if (chopInterval) return; // don't regenerate trees mid-chop — avoids invalidating the active tree's reference
   
     const { gridX: centerGridX, gridY: centerGridY } = latLngToGrid(userLat, userLng);
     const newCenterKey = `${centerGridY}_${centerGridX}`;
