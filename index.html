@@ -345,6 +345,16 @@
       align-items: center;
       justify-content: center;
     }
+	
+    .wood-marker-icon {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.4));
+      pointer-events: none;
+    }
 
     /* Inner Marker Visual Elements */
     .player-marker-icon {
@@ -752,7 +762,8 @@
   
     const gridRadius = 4;
     const TREE_DENSITY_THRESHOLD = 0.20;
-    const isVisible = map.getZoom() >= 17.5;
+    //const isVisible = map.getZoom() >= 17.5;
+	const isCloseEnough = map.getZoom() >= 17.5;
     const now = Date.now();
   
     for (let x = -gridRadius; x <= gridRadius; x++) {
@@ -783,12 +794,29 @@
   
           const treeContainer = document.createElement('div');
           treeContainer.className = 'tree-marker-container';
-          treeContainer.style.display = isVisible ? 'flex' : 'none';
-  
+          
           const treeImg = document.createElement('img');
-          treeImg.className = 'tree-marker-icon';
-          treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
-  
+          
+          if (isChopped) {
+              // Chopped trees are completely hidden when zoomed out
+              treeContainer.style.display = isCloseEnough ? 'flex' : 'none';
+          
+              treeImg.className = 'tree-marker-icon';
+              treeImg.src = 'cut_tree.png';
+          } else if (isCloseEnough) {
+              // Normal tree when zoomed in
+              treeContainer.style.display = 'flex';
+          
+              treeImg.className = 'tree-marker-icon';
+              treeImg.src = 'tree.png';
+          } else {
+              // Smaller wood icon when zoomed out
+              treeContainer.style.display = 'flex';
+          
+              treeImg.className = 'wood-marker-icon';
+              treeImg.src = 'wood.png';
+          }
+          
           treeContainer.appendChild(treeImg);
   
           const marker = new maplibregl.Marker({
@@ -904,9 +932,39 @@ function chopTree(treeNode) {
   }
   
   function updateTreeVisibility() {
-    const isVisible = map.getZoom() >= 17.5;
+    const isCloseEnough = map.getZoom() >= 17.5;
+  
     activeTreeNodes.forEach(node => {
-      node.element.style.display = isVisible ? 'flex' : 'none';
+      const img = node.element.querySelector('img');
+      if (!img) return;
+  
+      if (node.isChopped) {
+        // Chopped trees completely disappear when zoomed out
+        node.element.style.display = isCloseEnough ? 'flex' : 'none';
+  
+        if (isCloseEnough) {
+          img.className = 'tree-marker-icon';
+          img.src = 'cut_tree.png';
+        }
+  
+        // Chopped trees are never clickable
+        node.element.style.pointerEvents = 'none';
+  
+      } else {
+        // Normal trees are always represented:
+        // 96x96 tree when close, 48x48 wood when far away
+        node.element.style.display = 'flex';
+  
+        if (isCloseEnough) {
+          img.className = 'tree-marker-icon';
+          img.src = 'tree.png';
+          node.element.style.pointerEvents = 'auto';
+        } else {
+          img.className = 'wood-marker-icon';
+          img.src = 'wood.png';
+          node.element.style.pointerEvents = 'none';
+        }
+      }
     });
   }
   
