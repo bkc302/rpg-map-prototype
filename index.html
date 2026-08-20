@@ -291,35 +291,60 @@
     }
 
     .npc-marker-container {
-	  position: relative;
-	  z-index: 80;
-      width: 48px;
-      height: 48px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+        position: relative;
+        width: 48px;
+        height: 48px;
+        z-index: 80;
+        cursor: pointer;
+        display: block;
+        overflow: visible;
     }
 	
-    /* Quest marker floating above NPC */
+    .npc-visual-wrapper {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 48px;
+        height: 48px;
+    }
+	
+    .npc-marker-icon {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
+        display: block;
+    }
+	
     .quest-marker {
-      position: absolute;
-      left: 50%;
-      top: -30px;
-      transform: translateX(-50%);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 30px;
-      font-weight: 900;
-      line-height: 1;
-      pointer-events: none;
-      user-select: none;
-      text-shadow:
-        2px 2px 0 #000,
-        -1px -1px 0 #000,
-        1px -1px 0 #000,
-        -1px 1px 0 #000,
-        0 3px 5px rgba(0,0,0,0.8);
-      z-index: 20;
+        position: absolute;
+        left: 50%;
+        top: -30px;
+    
+        width: 30px;
+        height: 30px;
+    
+        transform: translateX(-50%);
+    
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 30px;
+        font-weight: 900;
+        line-height: 30px;
+        text-align: center;
+    
+        pointer-events: none;
+        user-select: none;
+    
+        text-shadow:
+            2px 2px 0 #000,
+            -1px -1px 0 #000,
+            1px -1px 0 #000,
+            -1px 1px 0 #000,
+            0 3px 5px rgba(0,0,0,0.8);
+    
+        z-index: 20;
     }
     
     .quest-marker.question-available {
@@ -1068,15 +1093,27 @@ function chopTree(treeNode) {
       const npcLat = (targetGridY + def.offsetY) * LAT_GRID_SIZE_DEG;
       const npcLng = (targetGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
   
+      // MapLibre's actual marker element.
+      // Keep this at a fixed 48x48 size so the geographic anchor never changes.
       const container = document.createElement("div");
       container.className = "npc-marker-container";
-  
+      
+      // NPC visual
       const img = document.createElement("img");
       img.className = "npc-marker-icon";
       img.src = def.img;
-      container.appendChild(img);
-  
-      const marker = new maplibregl.Marker({ element: container, anchor: "center" })
+      
+      // Dedicated visual wrapper
+      const visualWrapper = document.createElement("div");
+      visualWrapper.className = "npc-visual-wrapper";
+      
+      visualWrapper.appendChild(img);
+      container.appendChild(visualWrapper);
+      
+      const marker = new maplibregl.Marker({
+          element: container,
+          anchor: "center"
+      })
           .setLngLat([npcLng, npcLat])
           .addTo(map);
   
@@ -1295,7 +1332,6 @@ function chopTree(treeNode) {
   
       if (!node || !node.element) return;
   
-      // Remove existing marker.
       if (node.questMarker) {
           node.questMarker.remove();
           node.questMarker = null;
@@ -1303,7 +1339,6 @@ function chopTree(treeNode) {
   
       const state = getQuestMarkerState(def);
   
-      // No marker when there is no quest to display.
       if (!state) return;
   
       const questMarker = document.createElement("div");
@@ -1312,21 +1347,19 @@ function chopTree(treeNode) {
       if (state === "available") {
           questMarker.classList.add("question-available");
           questMarker.innerText = "?";
-      }
-  
-      if (state === "accepted") {
+      } 
+      else if (state === "accepted") {
           questMarker.classList.add("question-accepted");
           questMarker.innerText = "?";
-      }
-  
-      if (state === "turnin") {
+      } 
+      else if (state === "turnin") {
           questMarker.classList.add("turn-in");
           questMarker.innerText = "!";
       }
   
       node.element.appendChild(questMarker);
       node.questMarker = questMarker;
-  }  
+  }
   
   function completeQuest(questId) {
       questState[questId] = true;
