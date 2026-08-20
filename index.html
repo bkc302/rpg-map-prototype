@@ -549,10 +549,10 @@
                   disappearOnComplete: false,
   
                   dialog: {
-                      needItems: "To begin your journey, you’ll need to earn some gold. Walk around and gather at least 20 gold, then visit Timber Pete to buy yourself an axe. Once you have it, return to me.",
-                      partial: "You're making progress. Gather enough gold and buy an axe from Timber Pete.",
-                      ready: "Excellent work! That axe will serve you well. Here’s 20 gold for your effort.",
-                      afterComplete: "You're ready for the next step."
+                      offer: "To begin your journey, you’ll need to earn some gold. Walk around and gather at least 20 gold, then visit Timber Pete to buy yourself an axe. Will you take on this task?",
+                      inProgress: "You're making progress. Gather enough gold and buy an axe from Timber Pete.",
+                      readyToTurnIn: "Excellent work! That axe will serve you well.",
+                      completed: "Here's 20 gold for your effort. You're ready for the next step."
                   }
               },
   
@@ -564,10 +564,10 @@
                   disappearOnComplete: false,
   
                   dialog: {
-                      needItems: "Now that you have that shiny new axe, go cut down some trees and gather wood. Miner Gus will trade you a mining pick for 20 wood. Come see me once you have that pick.",
-                      partial: "Keep chopping! You’ll need enough wood to trade with Miner Gus.",
-                      ready: "Well done! With that mining pick, you’re ready to gather stone and ore.",
-                      afterComplete: "You've proven yourself again, adventurer."
+                      offer: "Now that you have that shiny new axe, go cut down some trees and gather wood. Miner Gus will trade you a mining pick for 20 wood. Will you take on this task?",
+                      inProgress: "Keep chopping! You’ll need enough wood to trade with Miner Gus.",
+                      readyToTurnIn: "Well done! With that mining pick, you’re ready to gather stone and ore.",
+                      completed: "Here's 30 gold for your effort. You've proven yourself again, adventurer."
                   }
               }
           ]
@@ -1148,6 +1148,15 @@ function chopTree(treeNode) {
       `;
   }
   
+  function isQuestAccepted(questId) {
+      return questState[questId] === 'accepted' || questState[questId] === true;
+  }
+  
+  function acceptQuest(questId) {
+      questState[questId] = 'accepted';
+      localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
+  }
+  
   function isQuestComplete(questId) {
       return questState[questId] === true;
   }
@@ -1167,9 +1176,6 @@ function chopTree(treeNode) {
       }
   
       stopLiveDistanceUpdates();
-  
-      // Guard so reward only happens once while the card is open
-      let rewardGivenThisSession = false;
   
       startLiveDistanceUpdates("npc", node, (dist) => {
           const inRange = Number(dist) <= def.talkRadius;
@@ -1194,45 +1200,61 @@ function chopTree(treeNode) {
           }
   
           const dialog = nextQuest.dialog;
+          const accepted = isQuestAccepted(nextQuest.questId);
+  
+          if (!accepted) {
+              container.innerHTML = `
+                  <b>${def.name}:</b><br/>
+                  <i>${dialog.offer}</i><br/>
+                  <button id="quest-accept-btn" class="btn buy-btn" style="margin-top:6px;">✅ Accept Quest</button>
+              `;
+  
+              document.getElementById('quest-accept-btn').addEventListener('click', () => {
+                  acceptQuest(nextQuest.questId);
+                  renderQuestNPC(def);
+              });
+              return;
+          }
+  
           const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
   
           if (!hasAllItems) {
-              const missing = nextQuest.requiredItems.filter(item => !playerInventory.has(item));
-              const partial = missing.length < nextQuest.requiredItems.length;
-  
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
-                  <i>${partial ? dialog.partial : dialog.needItems}</i>
+                  <i>${dialog.inProgress}</i>
               `;
               return;
           }
   
-          // Reward only once
-          if (!rewardGivenThisSession) {
-              rewardGivenThisSession = true;
+          container.innerHTML = `
+              <b>${def.name}:</b><br/>
+              <i>${dialog.readyToTurnIn}</i><br/>
+              <button id="quest-turnin-btn" class="btn buy-btn" style="margin-top:6px;">🎁 Turn In Quest</button>
+          `;
   
+          document.getElementById('quest-turnin-btn').addEventListener('click', () => {
               playerGold += nextQuest.rewardGold;
               updateGoldDisplay();
               localStorage.setItem("rpg_player_gold", playerGold);
-			  showGoldPopup(nextQuest.rewardGold);
+              showGoldPopup(nextQuest.rewardGold);
   
               for (const item of nextQuest.rewardItems) {
                   playerInventory.add(item);
               }
               localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+              updateInventoryDisplay();
   
               completeQuest(nextQuest.questId);
+  
+              document.getElementById('status').innerText = dialog.completed;
   
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
                   npcNodes[def.id] = null;
               }
-          }
   
-          container.innerHTML = `
-              <b>${def.name}:</b><br/>
-              <i>${dialog.ready}</i>
-          `;
+              renderQuestNPC(def);
+          });
       });
   }
   
