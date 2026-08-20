@@ -1593,11 +1593,13 @@ function chopTree(treeNode) {
   
   function ensureUIPanelVisible() {
       const uiPanel = document.getElementById('ui-panel');
-      const toggleBtn = document.getElementById('toggle-ui-btn');
+      const toggleBtn = document.getElementById('toggle-ui-btn'); 
+      const inventoryBtn = document.getElementById('inventory-btn'); //NEW
   
       if (uiPanel.style.display === 'none') {
           uiPanel.style.display = 'block';
           toggleBtn.style.display = 'none';
+		  inventoryBtn.style.display = 'none'; //NEW
       }
   }
   
