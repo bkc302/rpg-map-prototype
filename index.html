@@ -291,7 +291,6 @@
     }
 
     .npc-marker-container {
-	  position: relative;
 	  z-index: 80;
       width: 48px;
       height: 48px;
@@ -299,39 +298,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-	
-    /* Quest marker floating above NPC */
-    .quest-marker {
-      position: absolute;
-      left: 50%;
-      top: -30px;
-      transform: translateX(-50%);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 30px;
-      font-weight: 900;
-      line-height: 1;
-      pointer-events: none;
-      user-select: none;
-      text-shadow:
-        2px 2px 0 #000,
-        -1px -1px 0 #000,
-        1px -1px 0 #000,
-        -1px 1px 0 #000,
-        0 3px 5px rgba(0,0,0,0.8);
-      z-index: 20;
-    }
-    
-    .quest-marker.question-available {
-      color: #facc15; /* Yellow ? */
-    }
-    
-    .quest-marker.question-accepted {
-      color: #9ca3af; /* Grey ? */
-    }
-    
-    .quest-marker.turn-in {
-      color: #facc15; /* Yellow ! */
     }
 
     /* 96x96 Tree Marker Container */
@@ -344,16 +310,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-	
-    .wood-marker-icon {
-      width: 48px;
-      height: 48px;
-      object-fit: contain;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.4));
-      pointer-events: none;
     }
 
     /* Inner Marker Visual Elements */
@@ -762,8 +718,7 @@
   
     const gridRadius = 4;
     const TREE_DENSITY_THRESHOLD = 0.20;
-    //const isVisible = map.getZoom() >= 17.5;
-	const isCloseEnough = map.getZoom() >= 17.5;
+    const isVisible = map.getZoom() >= 17.5;
     const now = Date.now();
   
     for (let x = -gridRadius; x <= gridRadius; x++) {
@@ -794,29 +749,12 @@
   
           const treeContainer = document.createElement('div');
           treeContainer.className = 'tree-marker-container';
-          
+          treeContainer.style.display = isVisible ? 'flex' : 'none';
+  
           const treeImg = document.createElement('img');
-          
-          if (isChopped) {
-              // Chopped trees are completely hidden when zoomed out
-              treeContainer.style.display = isCloseEnough ? 'flex' : 'none';
-          
-              treeImg.className = 'tree-marker-icon';
-              treeImg.src = 'cut_tree.png';
-          } else if (isCloseEnough) {
-              // Normal tree when zoomed in
-              treeContainer.style.display = 'flex';
-          
-              treeImg.className = 'tree-marker-icon';
-              treeImg.src = 'tree.png';
-          } else {
-              // Smaller wood icon when zoomed out
-              treeContainer.style.display = 'flex';
-          
-              treeImg.className = 'wood-marker-icon';
-              treeImg.src = 'wood.png';
-          }
-          
+          treeImg.className = 'tree-marker-icon';
+          treeImg.src = isChopped ? 'cut_tree.png' : 'tree.png';
+  
           treeContainer.appendChild(treeImg);
   
           const marker = new maplibregl.Marker({
@@ -932,39 +870,9 @@ function chopTree(treeNode) {
   }
   
   function updateTreeVisibility() {
-    const isCloseEnough = map.getZoom() >= 17.5;
-  
+    const isVisible = map.getZoom() >= 17.5;
     activeTreeNodes.forEach(node => {
-      const img = node.element.querySelector('img');
-      if (!img) return;
-  
-      if (node.isChopped) {
-        // Chopped trees completely disappear when zoomed out
-        node.element.style.display = isCloseEnough ? 'flex' : 'none';
-  
-        if (isCloseEnough) {
-          img.className = 'tree-marker-icon';
-          img.src = 'cut_tree.png';
-        }
-  
-        // Chopped trees are never clickable
-        node.element.style.pointerEvents = 'none';
-  
-      } else {
-        // Normal trees are always represented:
-        // 96x96 tree when close, 48x48 wood when far away
-        node.element.style.display = 'flex';
-  
-        if (isCloseEnough) {
-          img.className = 'tree-marker-icon';
-          img.src = 'tree.png';
-          node.element.style.pointerEvents = 'auto';
-        } else {
-          img.className = 'wood-marker-icon';
-          img.src = 'wood.png';
-          node.element.style.pointerEvents = 'none';
-        }
-      }
+      node.element.style.display = isVisible ? 'flex' : 'none';
     });
   }
   
@@ -1080,17 +988,7 @@ function chopTree(treeNode) {
           .setLngLat([npcLng, npcLat])
           .addTo(map);
   
-      npcNodes[def.id] = {
-          lat: npcLat,
-          lng: npcLng,
-          marker,
-          element: container,
-          questMarker: null
-      };
-	  
-      if (QUEST_NPC_DEFS[def.id]) {
-          updateQuestMarker(QUEST_NPC_DEFS[def.id]);
-      }
+      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker };
   
       container.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1263,71 +1161,6 @@ function chopTree(treeNode) {
       return questState[questId] === true;
   }
   
-  function getQuestMarkerState(def) {
-      // Find the first quest that hasn't been completed.
-      const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
-  
-      // All quests are complete.
-      if (!nextQuest) {
-          return null;
-      }
-  
-      // Quest hasn't been accepted yet.
-      if (!isQuestAccepted(nextQuest.questId)) {
-          return "available";
-      }
-  
-      // Quest has been accepted, but requirements aren't met.
-      const hasAllItems = nextQuest.requiredItems.every(item =>
-          playerInventory.has(item)
-      );
-  
-      if (!hasAllItems) {
-          return "accepted";
-      }
-  
-      // Quest is ready to turn in.
-      return "turnin";
-  }
-  
-  function updateQuestMarker(def) {
-      const node = npcNodes[def.id];
-  
-      if (!node || !node.element) return;
-  
-      // Remove existing marker.
-      if (node.questMarker) {
-          node.questMarker.remove();
-          node.questMarker = null;
-      }
-  
-      const state = getQuestMarkerState(def);
-  
-      // No marker when there is no quest to display.
-      if (!state) return;
-  
-      const questMarker = document.createElement("div");
-      questMarker.className = "quest-marker";
-  
-      if (state === "available") {
-          questMarker.classList.add("question-available");
-          questMarker.innerText = "?";
-      }
-  
-      if (state === "accepted") {
-          questMarker.classList.add("question-accepted");
-          questMarker.innerText = "?";
-      }
-  
-      if (state === "turnin") {
-          questMarker.classList.add("turn-in");
-          questMarker.innerText = "!";
-      }
-  
-      node.element.appendChild(questMarker);
-      node.questMarker = questMarker;
-  }  
-  
   function completeQuest(questId) {
       questState[questId] = true;
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
@@ -1378,7 +1211,6 @@ function chopTree(treeNode) {
   
               document.getElementById('quest-accept-btn').addEventListener('click', () => {
                   acceptQuest(nextQuest.questId);
-				  updateQuestMarker(def);
                   renderQuestNPC(def);
               });
               return;
@@ -1413,8 +1245,6 @@ function chopTree(treeNode) {
               updateInventoryDisplay();
   
               completeQuest(nextQuest.questId);
-			  
-			  updateQuestMarker(def);
   
               document.getElementById('status').innerText = dialog.completed;
   
@@ -1764,12 +1594,12 @@ function chopTree(treeNode) {
   function ensureUIPanelVisible() {
       const uiPanel = document.getElementById('ui-panel');
       const toggleBtn = document.getElementById('toggle-ui-btn'); 
-      const inventoryBtn = document.getElementById('inventory-btn');
+      const inventoryBtn = document.getElementById('inventory-btn'); //NEW
   
       if (uiPanel.style.display === 'none') {
           uiPanel.style.display = 'block';
           toggleBtn.style.display = 'none';
-		  inventoryBtn.style.display = 'none';
+		  inventoryBtn.style.display = 'none'; //NEW
       }
   }
   
