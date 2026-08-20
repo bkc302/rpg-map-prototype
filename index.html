@@ -291,6 +291,7 @@
     }
 
     .npc-marker-container {
+	  position: relative;
 	  z-index: 80;
       width: 48px;
       height: 48px;
@@ -298,6 +299,39 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+	
+    /* Quest marker floating above NPC */
+    .quest-marker {
+      position: absolute;
+      left: 50%;
+      top: -30px;
+      transform: translateX(-50%);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+      pointer-events: none;
+      user-select: none;
+      text-shadow:
+        2px 2px 0 #000,
+        -1px -1px 0 #000,
+        1px -1px 0 #000,
+        -1px 1px 0 #000,
+        0 3px 5px rgba(0,0,0,0.8);
+      z-index: 20;
+    }
+    
+    .quest-marker.question-available {
+      color: #facc15; /* Yellow ? */
+    }
+    
+    .quest-marker.question-accepted {
+      color: #9ca3af; /* Grey ? */
+    }
+    
+    .quest-marker.turn-in {
+      color: #facc15; /* Yellow ! */
     }
 
     /* 96x96 Tree Marker Container */
@@ -988,7 +1022,17 @@ function chopTree(treeNode) {
           .setLngLat([npcLng, npcLat])
           .addTo(map);
   
-      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker };
+      npcNodes[def.id] = {
+          lat: npcLat,
+          lng: npcLng,
+          marker,
+          element: container,
+          questMarker: null
+      };
+	  
+      if (QUEST_NPC_DEFS[def.id]) {
+          updateQuestMarker(QUEST_NPC_DEFS[def.id]);
+      }
   
       container.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1161,6 +1205,71 @@ function chopTree(treeNode) {
       return questState[questId] === true;
   }
   
+  function getQuestMarkerState(def) {
+      // Find the first quest that hasn't been completed.
+      const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
+  
+      // All quests are complete.
+      if (!nextQuest) {
+          return null;
+      }
+  
+      // Quest hasn't been accepted yet.
+      if (!isQuestAccepted(nextQuest.questId)) {
+          return "available";
+      }
+  
+      // Quest has been accepted, but requirements aren't met.
+      const hasAllItems = nextQuest.requiredItems.every(item =>
+          playerInventory.has(item)
+      );
+  
+      if (!hasAllItems) {
+          return "accepted";
+      }
+  
+      // Quest is ready to turn in.
+      return "turnin";
+  }
+  
+  function updateQuestMarker(def) {
+      const node = npcNodes[def.id];
+  
+      if (!node || !node.element) return;
+  
+      // Remove existing marker.
+      if (node.questMarker) {
+          node.questMarker.remove();
+          node.questMarker = null;
+      }
+  
+      const state = getQuestMarkerState(def);
+  
+      // No marker when there is no quest to display.
+      if (!state) return;
+  
+      const questMarker = document.createElement("div");
+      questMarker.className = "quest-marker";
+  
+      if (state === "available") {
+          questMarker.classList.add("question-available");
+          questMarker.innerText = "?";
+      }
+  
+      if (state === "accepted") {
+          questMarker.classList.add("question-accepted");
+          questMarker.innerText = "?";
+      }
+  
+      if (state === "turnin") {
+          questMarker.classList.add("turn-in");
+          questMarker.innerText = "!";
+      }
+  
+      node.element.appendChild(questMarker);
+      node.questMarker = questMarker;
+  }  
+  
   function completeQuest(questId) {
       questState[questId] = true;
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
@@ -1211,6 +1320,7 @@ function chopTree(treeNode) {
   
               document.getElementById('quest-accept-btn').addEventListener('click', () => {
                   acceptQuest(nextQuest.questId);
+				  updateQuestMarker(def);
                   renderQuestNPC(def);
               });
               return;
@@ -1245,6 +1355,8 @@ function chopTree(treeNode) {
               updateInventoryDisplay();
   
               completeQuest(nextQuest.questId);
+			  
+			  updateQuestMarker(def);
   
               document.getElementById('status').innerText = dialog.completed;
   
@@ -1594,12 +1706,12 @@ function chopTree(treeNode) {
   function ensureUIPanelVisible() {
       const uiPanel = document.getElementById('ui-panel');
       const toggleBtn = document.getElementById('toggle-ui-btn'); 
-      const inventoryBtn = document.getElementById('inventory-btn'); //NEW
+      const inventoryBtn = document.getElementById('inventory-btn');
   
       if (uiPanel.style.display === 'none') {
           uiPanel.style.display = 'block';
           toggleBtn.style.display = 'none';
-		  inventoryBtn.style.display = 'none'; //NEW
+		  inventoryBtn.style.display = 'none';
       }
   }
   
