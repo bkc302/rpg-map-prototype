@@ -298,6 +298,35 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
+    }
+
+    .npc-quest-indicator {
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9), 0 0 4px black;
+      pointer-events: none;
+      display: none;
+    }
+
+    .npc-quest-indicator.available {
+      color: #facc15; /* yellow question mark - quest available */
+      display: block;
+    }
+
+    .npc-quest-indicator.in-progress {
+      color: #9ca3af; /* grey question mark - quest accepted, in progress */
+      display: block;
+    }
+
+    .npc-quest-indicator.ready {
+      color: #facc15; /* yellow exclamation - ready to turn in */
+      display: block;
     }
 
     /* 96x96 Tree Marker Container */
@@ -984,11 +1013,22 @@ function chopTree(treeNode) {
       img.src = def.img;
       container.appendChild(img);
   
+      let indicatorEl = null;
+      if (def.quests) {
+          indicatorEl = document.createElement("div");
+          indicatorEl.className = "npc-quest-indicator";
+          container.appendChild(indicatorEl);
+      }
+  
       const marker = new maplibregl.Marker({ element: container, anchor: "center" })
           .setLngLat([npcLng, npcLat])
           .addTo(map);
   
-      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker };
+      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker, indicatorEl };
+  
+      if (def.quests) {
+          updateQuestIndicator(def);
+      }
   
       container.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -1140,6 +1180,7 @@ function chopTree(treeNode) {
   
       updateGoldDisplay();
       updateInventoryDisplay();
+      updateAllQuestIndicators();
   
       document.getElementById("status").innerText = `Acquired ${def.tradeItem}!`;
       document.getElementById("plot-info").innerHTML = `
@@ -1164,6 +1205,47 @@ function chopTree(treeNode) {
   function completeQuest(questId) {
       questState[questId] = true;
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
+  }
+  
+  function getQuestIndicatorState(def) {
+      if (!def.quests) return null;
+  
+      const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
+      if (!nextQuest) return 'none';
+  
+      if (!isQuestAccepted(nextQuest.questId)) return 'available';
+  
+      const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
+      return hasAllItems ? 'ready' : 'in-progress';
+  }
+  
+  function updateQuestIndicator(def) {
+      if (!def.quests) return;
+  
+      const node = npcNodes[def.id];
+      if (!node || !node.indicatorEl) return;
+  
+      const state = getQuestIndicatorState(def);
+      const el = node.indicatorEl;
+  
+      el.className = 'npc-quest-indicator';
+      if (state === 'available') {
+          el.classList.add('available');
+          el.innerText = '?';
+      } else if (state === 'in-progress') {
+          el.classList.add('in-progress');
+          el.innerText = '?';
+      } else if (state === 'ready') {
+          el.classList.add('ready');
+          el.innerText = '!';
+      }
+      // 'none' leaves only the base class, which is display:none
+  }
+  
+  function updateAllQuestIndicators() {
+      for (const key in QUEST_NPC_DEFS) {
+          updateQuestIndicator(QUEST_NPC_DEFS[key]);
+      }
   }
   
   function renderQuestNPC(def) {
@@ -1211,6 +1293,7 @@ function chopTree(treeNode) {
   
               document.getElementById('quest-accept-btn').addEventListener('click', () => {
                   acceptQuest(nextQuest.questId);
+                  updateQuestIndicator(def);
                   renderQuestNPC(def);
               });
               return;
@@ -1251,6 +1334,8 @@ function chopTree(treeNode) {
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
                   npcNodes[def.id] = null;
+              } else {
+                  updateQuestIndicator(def);
               }
   
               renderQuestNPC(def);
@@ -1807,6 +1892,7 @@ function chopTree(treeNode) {
         for (const key in QUEST_NPC_DEFS) {
             checkNPCProximity(QUEST_NPC_DEFS[key]);
         }
+        updateAllQuestIndicators();
         if (autoCenterEnabled) {
           if (compassActive) {
             map.jumpTo({
