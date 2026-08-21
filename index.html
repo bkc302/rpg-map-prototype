@@ -298,15 +298,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
     }
 
     .npc-quest-indicator {
-      position: absolute;
-      top: -16px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 900;
       line-height: 1;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9), 0 0 4px black;
@@ -989,6 +984,9 @@ function chopTree(treeNode) {
       if (npcNodes[def.id]?.marker) {
           npcNodes[def.id].marker.remove();
       }
+      if (npcNodes[def.id]?.indicatorMarker) {
+          npcNodes[def.id].indicatorMarker.remove();
+      }
   
       const { gridX, gridY } = latLngToGrid(userLat, userLng);
       const radius = def.spawnRadius;
@@ -1013,18 +1011,26 @@ function chopTree(treeNode) {
       img.src = def.img;
       container.appendChild(img);
   
-      let indicatorEl = null;
-      if (def.quests) {
-          indicatorEl = document.createElement("div");
-          indicatorEl.className = "npc-quest-indicator";
-          container.appendChild(indicatorEl);
-      }
-  
       const marker = new maplibregl.Marker({ element: container, anchor: "center" })
           .setLngLat([npcLng, npcLat])
           .addTo(map);
   
-      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker, indicatorEl };
+      let indicatorEl = null;
+      let indicatorMarker = null;
+      if (def.quests) {
+          indicatorEl = document.createElement("div");
+          indicatorEl.className = "npc-quest-indicator";
+  
+          indicatorMarker = new maplibregl.Marker({
+              element: indicatorEl,
+              anchor: "bottom",
+              offset: [0, -30]
+          })
+              .setLngLat([npcLng, npcLat])
+              .addTo(map);
+      }
+  
+      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker, indicatorEl, indicatorMarker };
   
       if (def.quests) {
           updateQuestIndicator(def);
@@ -1065,6 +1071,9 @@ function chopTree(treeNode) {
       node.lng = (newGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
   
       node.marker.setLngLat([node.lng, node.lat]);
+      if (node.indicatorMarker) {
+          node.indicatorMarker.setLngLat([node.lng, node.lat]);
+      }
   
       const infoElem = document.getElementById("plot-info");
       if (infoElem && infoElem.innerText.includes(def.name)) {
@@ -1333,6 +1342,7 @@ function chopTree(treeNode) {
   
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
+                  node.indicatorMarker?.remove();
                   npcNodes[def.id] = null;
               } else {
                   updateQuestIndicator(def);
@@ -1752,6 +1762,9 @@ function chopTree(treeNode) {
               const def = QUEST_NPC_DEFS[key];
               if (npcNodes[def.id]?.marker) {
                   npcNodes[def.id].marker.remove();
+              }
+              if (npcNodes[def.id]?.indicatorMarker) {
+                  npcNodes[def.id].indicatorMarker.remove();
               }
               npcNodes[def.id] = null;
           }
