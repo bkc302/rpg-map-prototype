@@ -921,26 +921,24 @@ function chopTree(treeNode) {
     const isZoomedOut = zoom < 17.75;
   
     activeTreeNodes.forEach(node => {
-      node.element.style.display = 'flex';
-  
       const img = node.element.querySelector('.tree-marker-icon');
       if (!img) return;
   
       if (isZoomedOut) {
-        // Any zoom below 17.95:
-        // living tree = wood.png
-        // chopped tree = cut_tree.png
-        node.element.classList.add('zoomed-out');
-  
-        if (!node.isChopped) {
-          img.src = 'wood.png';
-        } else {
-          img.src = 'cut_tree.png';
+        if (node.isChopped) {
+          // Hide chopped/stump trees when zoomed out
+          node.element.style.display = 'none';
+          return;
         }
+  
+        // Living trees become small wood.png markers
+        node.element.style.display = 'flex';
+        node.element.classList.add('zoomed-out');
+        img.src = 'wood.png';
+  
       } else {
-        // 17.95 and above:
-        // living tree = tree.png
-        // chopped tree = cut_tree.png
+        // Zoomed in: show everything normally
+        node.element.style.display = 'flex';
         node.element.classList.remove('zoomed-out');
   
         img.src = node.isChopped ? 'cut_tree.png' : 'tree.png';
