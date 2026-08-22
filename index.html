@@ -113,6 +113,11 @@
       z-index: 999;
 	  display: none;
     }
+	
+    #inventory-btn:hover {
+      background: #21262d;
+      border-color: #8b949e;
+    }	
     
     #inventory-panel {
       position: absolute;
@@ -158,6 +163,8 @@
 	}
 	
     .gold-popup-text {
+	  position: absolute;
+      z-index: 200;
       color: #ffd700;
       font-weight: bold;
       font-size: 18px;
@@ -301,6 +308,8 @@
     }
 
     .npc-quest-indicator {
+      position: absolute;
+      z-index: 81;
       width: 30px;
       height: 30px;
       display: flex;
@@ -339,6 +348,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+	
+    .tree-marker-container.zoomed-out {
+      width: 48px;
+      height: 48px;
     }
 
     /* Inner Marker Visual Elements */
@@ -499,7 +513,7 @@
   let playerWood = (savedWood !== null) ? parseInt(savedWood, 10) || 0 : 0;
   
   const PLOT_PRICE = 100;
-  const MIN_START_ACCURACY_FEET = 50;
+  const MIN_START_ACCURACY_FEET = 5000;
   const TREE_CUT_RADIUS_FEET = 150;
   const TREE_RESPAWN_MS = 5 * 60 * 1000; // 5 Minutes
   
@@ -535,7 +549,7 @@
           name: "Timber Pete",
           img: "pete.png",
           talkRadius: 150,
-          spawnRadius: 2,
+          spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.25,
           tradeItem: "axe",
@@ -549,7 +563,7 @@
           name: "Miner Gus",
           img: "gus.png",
           talkRadius: 150,
-          spawnRadius: 2,
+          spawnRadius: 1,
           offsetX: 0.75,
           offsetY: 0.25,
           tradeItem: "mining pick",
@@ -566,8 +580,8 @@
           img: "bramblefoot.png",
           talkRadius: 150,
           spawnRadius: 1,
-          offsetX: 0.50,
-          offsetY: 0.20,
+          offsetX: 0.25,
+          offsetY: 0.80,
   
           quests: [
               {
@@ -818,6 +832,10 @@
         }
       }
     }
+
+    // Apply the correct tree image/size for the current zoom
+    updateTreeVisibility();	
+	
   }
   
   function renderTreeCard(treeNode) {
@@ -899,9 +917,34 @@ function chopTree(treeNode) {
   }
   
   function updateTreeVisibility() {
-    const isVisible = map.getZoom() >= 17.5;
+    const zoom = map.getZoom();
+    const isZoomedOut = zoom < 17.75;
+  
     activeTreeNodes.forEach(node => {
-      node.element.style.display = isVisible ? 'flex' : 'none';
+      node.element.style.display = 'flex';
+  
+      const img = node.element.querySelector('.tree-marker-icon');
+      if (!img) return;
+  
+      if (isZoomedOut) {
+        // Any zoom below 17.95:
+        // living tree = wood.png
+        // chopped tree = cut_tree.png
+        node.element.classList.add('zoomed-out');
+  
+        if (!node.isChopped) {
+          img.src = 'wood.png';
+        } else {
+          img.src = 'cut_tree.png';
+        }
+      } else {
+        // 17.95 and above:
+        // living tree = tree.png
+        // chopped tree = cut_tree.png
+        node.element.classList.remove('zoomed-out');
+  
+        img.src = node.isChopped ? 'cut_tree.png' : 'tree.png';
+      }
     });
   }
   
@@ -1029,7 +1072,7 @@ function chopTree(treeNode) {
           indicatorMarker = new maplibregl.Marker({
               element: indicatorEl,
               anchor: "bottom",
-              offset: [0, -30]
+              offset: [0, -25]
           })
               .setLngLat([npcLng, npcLat])
               .addTo(map);
