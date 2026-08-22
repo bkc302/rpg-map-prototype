@@ -423,7 +423,7 @@
 
 <!-- Start Screen Overlay -->
 <div id="start-overlay">
-  <h1>⚔️ Welcome to... Whatever This Is</h1>
+  <h1>Welcome to... Whatever This Is</h1>
 
   <p>
     Collect shiny coins, cut down trees, buy land, and that is all for now.<br>
@@ -432,14 +432,15 @@
 
   <h3>📝 TODO List</h3>
   <ul style="text-align:left; max-width:300px; margin:0 auto;">
-    <li>🪨 Ore Nodes</li>
-    <li>🛠️ Crafting</li>
-    <li>⚔️ Weapons/Combat (against what? who knows)</li>
-    <li>🛒 Market</li>
-    <li>🏠 Houses/Castles/Forts (?)</li>
+    <li>Ore Nodes</li>
+    <li>Crafting</li>
+    <li>Weapons/Combat (against what? who knows)</li>
+    <li>Market</li>
+    <li>More Quests</li>
+    <li>Houses</li>
   </ul><br>
 
-  <button id="start-btn" class="btn gps-btn">📍 Start Here</button>
+  <button id="start-btn" class="btn gps-btn">Start Here</button>
   <div id="start-status"></div>
 </div>
 
@@ -1737,10 +1738,10 @@ function chopTree(treeNode) {
     const btn = document.getElementById('autocenter-button');
     if (autoCenterEnabled) {
       btn.className = 'btn autocenter-on';
-      btn.innerText = '🎯 Auto-Center: ON';
+      btn.innerText = 'Auto-Center: ON';
     } else {
       btn.className = 'btn autocenter-off';
-      btn.innerText = '📍 Auto-Center: OFF (Tap to Lock)';
+      btn.innerText = 'Auto-Center: OFF (Tap to Lock)';
     }
   }
   
