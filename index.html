@@ -12,7 +12,12 @@
   <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
 
   <style>
-    body { margin: 0; padding: 0; background-color: #0d1117; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #2f4f2f;
+      font-family: Georgia, "Times New Roman", serif;
+    }
     #map { position: absolute; top: 0; bottom: 0; width: 100%; }
     
     /* ==============================
@@ -23,53 +28,54 @@
       position: fixed;
       inset: 0;
       z-index: 1000;
-  
+    
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-  
+    
       padding: 24px;
       box-sizing: border-box;
-  
+    
       background:
         radial-gradient(
           circle at center,
-          #18212b 0%,
-          #0d1117 70%
+          rgba(78, 96, 55, 0.96) 0%,
+          rgba(47, 79, 47, 0.98) 45%,
+          rgba(35, 53, 31, 1) 100%
         );
-  
+    
       text-align: center;
-      color: #e6edf3;
+      color: #ead9b5;
     }
   
     /* Game Title */
   
     #start-overlay h1 {
-      margin: 0 0 6px;
-  
-      font-family: monospace;
-      font-size: clamp(38px, 8vw, 64px);
+      margin: 0 0 8px;
+    
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(36px, 8vw, 62px);
       font-weight: 900;
-      letter-spacing: 5px;
-  
-      color: #facc15;
-  
+      letter-spacing: 3px;
+    
+      color: #e6c77a;
+    
       text-shadow:
-        3px 3px 0 #3b3217,
-        5px 5px 0 rgba(0, 0, 0, 0.45);
+        3px 3px 0 #4a3218,
+        5px 5px 0 rgba(0, 0, 0, 0.55);
     }
   
     /* Tagline */
   
     #start-tagline {
       margin: 0 0 24px;
-  
-      font-family: Georgia, serif;
+    
+      font-family: Georgia, "Times New Roman", serif;
       font-size: 19px;
       font-style: italic;
-  
-      color: #94a3b8;
+    
+      color: #c8b48a;
     }
   
     /* Description */
@@ -77,11 +83,11 @@
     #start-description {
       max-width: 420px;
       margin: 0 0 18px;
-  
+    
       font-size: 14px;
       line-height: 1.5;
-  
-      color: #94a3b8;
+    
+      color: #d6c7a5;
     }
   
     /* Development Notice */
@@ -90,22 +96,22 @@
       max-width: 420px;
       margin: 0 0 24px;
       padding: 10px 16px;
-  
+    
       box-sizing: border-box;
-  
-      border: 1px solid #30363d;
-      border-radius: 6px;
-  
-      background: rgba(13, 17, 23, 0.65);
-  
+    
+      border: 1px solid #76572f;
+      border-radius: 4px;
+    
+      background: rgba(48, 38, 24, 0.55);
+    
       font-size: 13px;
       line-height: 1.4;
-  
-      color: #7d8590;
+    
+      color: #bfae87;
     }
   
     #dev-notice strong {
-      color: #c9d1d9;
+      color: #e0c98f;
     }
   
     /* Coming Eventually */
@@ -119,13 +125,13 @@
   
     #start-todo h3 {
       margin: 0 0 8px;
-  
-      font-size: 12px;
+    
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 2px;
       text-transform: uppercase;
-  
-      color: #64748b;
+    
+      color: #b89b62;
     }
   
     #start-todo ul {
@@ -136,62 +142,65 @@
     }
   
     #start-todo li {
-      padding: 6px 0;
-  
-      border-bottom: 1px solid #21262d;
-  
+      padding: 7px 0;
+    
+      border-bottom: 1px solid rgba(150, 120, 70, 0.25);
+    
       font-size: 14px;
-      color: #c9d1d9;
+      color: #d8c8a4;
     }
   
     #start-todo li::before {
       content: "⚒";
       display: inline-block;
       width: 26px;
-  
-      color: #facc15;
+    
+      color: #c49a55;
     }
-  
+    
     #start-todo small {
-      color: #64748b;
+      color: #9e8b67;
     }
   
     /* Start Button */
   
     #start-btn {
       width: auto;
-      min-width: 170px;
+      min-width: 180px;
       max-width: 280px;
-  
-      padding: 12px 24px;
+    
+      padding: 13px 28px;
       box-sizing: border-box;
-  
-      border: 1px solid #eab308;
-      border-radius: 6px;
-  
-      background: #facc15;
-      color: #161b22;
-  
-      font-size: 15px;
+    
+      border: 2px solid #8c6a38;
+      border-radius: 5px;
+    
+      background: #5d7a3a;
+      color: #f0dfb2;
+    
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 16px;
       font-weight: 700;
-  
+    
       cursor: pointer;
-  
-      box-shadow: 0 3px 0 #8a6b18;
-  
+    
+      box-shadow:
+        0 4px 0 #3d5127,
+        inset 0 1px 0 rgba(255,255,255,0.15);
+    
       transition:
         background 0.15s ease,
         transform 0.1s ease,
         box-shadow 0.1s ease;
     }
-  
+    
     #start-btn:hover {
-      background: #fde047;
+      background: #6f9045;
     }
-  
+    
     #start-btn:active {
-      transform: translateY(2px);
-      box-shadow: 0 1px 0 #8a6b18;
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #3d5127;
     }
   
     /* Status */
@@ -199,9 +208,8 @@
     #start-status {
       min-height: 20px;
       margin-top: 10px;
-  
       font-size: 14px;
-      color: #38bdf8;
+      color: #b8c98a;
     }
 
     #ui-panel {
@@ -854,8 +862,8 @@
     
       normalWidth: 72,
       normalHeight: 72,
-      zoomWidth: 40,
-      zoomHeight: 40,
+      zoomWidth: 48,
+      zoomHeight: 48,
       zoomThreshold: 17.75,
     
       respawnMs: 5 * 60 * 1000,
