@@ -14,7 +14,7 @@
   <style>
   
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@700&family=VT323&display=swap');
-    
+  
     body {
       margin: 0;
       padding: 0;
@@ -61,19 +61,18 @@
       font-weight: 900;
       letter-spacing: 4px;  
     
-      /* Primary Coin Gold */
+      /* Warm Coin Gold (easier on the eyes) */
       color: #FBC340;
     
-      /* Multi-layered Pixel Shadow using Coin Amber & Black outline */
-      text-shadow:
-        4px 4px 0 #EB933A,
-        8px 8px 0 #000000;
+      /* Single hard pixel drop shadow using dark tree bark */
+      text-shadow: 4px 4px 0 #503E0E;
     }
     
     /* Tagline */
     
     #start-tagline {
       margin: 0 0 24px;
+      text-align: center;
     
       font-family: "Courier New", monospace;
       font-size: 15px;
@@ -195,16 +194,15 @@
     
     #start-btn {
       width: min(280px, 80vw);
-      padding: 12px 20px;
+      padding: 14px 20px;
     
-      /* Solid White Border for High Contrast */
-      border: 2px solid #ffffff;
+      border: 3px solid #FBC340;
       border-radius: 0;
     
-      /* Player Cloak Green Base */
-      background-color: #4CA940;
+      /* Rich Amber Base */
+      background-color: #EB933A;
     
-      color: #ffffff;
+      color: #000000;
     
       font-family: "Courier New", monospace;
       font-size: 18px;
@@ -213,25 +211,25 @@
     
       cursor: pointer;
     
-      /* 3D Pixel Inset using Deep Forest Green & Light Canopy Green */
+      /* 3D Pixel Bevel using Gold Highlights and Bark Shadows */
       box-shadow:
-        inset -4px -4px 0 #267A26,
-        inset 4px 4px 0 #68BC56,
+        inset -4px -4px 0 #72552A,
+        inset 4px 4px 0 #FDE176,
         6px 6px 0 #000000;
       
       transition: transform 0.05s, background-color 0.05s;
     }
     
     #start-btn:hover {
-      background-color: #68BC56;
-      color: #FDE176;
+      background-color: #FBC340;
+      color: #000000;
     }
     
     #start-btn:active {
       transform: translate(4px, 4px);
       box-shadow:
-        inset -4px -4px 0 #267A26,
-        inset 4px 4px 0 #68BC56,
+        inset -4px -4px 0 #72552A,
+        inset 4px 4px 0 #FDE176,
         2px 2px 0 #000000;
     }
     
@@ -2222,7 +2220,7 @@
   });
 
   document.getElementById('start-btn').addEventListener('click', () => {
-    document.getElementById('start-status').innerText = '⌛ Acquiring GPS fix...';
+    document.getElementById('start-status').innerText = 'Acquiring GPS fix...';
     geolocate.trigger();
   });
 
@@ -2286,7 +2284,7 @@
 	  
         if (accuracyFt > MIN_START_ACCURACY_FEET) {
             document.getElementById('start-status').innerText =
-                `📡 Improving GPS signal... (${accuracyFt.toFixed(0)} ft, need ${MIN_START_ACCURACY_FEET} ft)`;
+                `Improving GPS signal... (${accuracyFt.toFixed(0)} ft, need ${MIN_START_ACCURACY_FEET} ft)`;
             return;
         }	  
 	  
@@ -2339,7 +2337,7 @@
         }
       }    
 
-      document.getElementById('status').innerText = `📍 Signal Active (${accuracyFt.toFixed(0)} ft accuracy)`;
+      document.getElementById('status').innerText = `Signal Active (${accuracyFt.toFixed(0)} ft accuracy)`;
   });
 
   geolocate.on('error', (e) => {
