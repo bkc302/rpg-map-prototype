@@ -1270,19 +1270,19 @@
     renderCollectedItemCard(node);
   }
 
-  function renderCollectedItemCard(node) {
-    const container = document.getElementById('plot-info');
-  
-    container.innerHTML = `
-      <b>${node.def.name}</b><br/>
-      <span style="color:#a855f7;">
-        This resource has been collected.
-      </span><br/>
-      <small style="color:#94a3b8;">
-        Respawns in ${node.def.respawnMs / 60000} minutes.
-      </small>
-    `;
-  }
+function renderCollectedItemCard(node) {
+  const container = document.getElementById('plot-info');
+
+  container.innerHTML = `
+    <b>${node.def.name}</b><br/>
+    <span style="color:#ffffff;">
+      This resource has been collected.
+    </span><br/>
+    <small style="color:#f1f5f9;">
+      Respawns in ${node.def.respawnMs / 60000} minutes.
+    </small>
+  `;
+}
   
   function updateItemVisibility() {
     const zoom = map.getZoom();
