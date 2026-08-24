@@ -686,7 +686,7 @@
     <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
   </div>
   
-<div id="chop-progress" style="
+<div id="collection-progress" style="
   width: 200px;
   height: 20px;
   background: #444;
@@ -695,7 +695,7 @@
   margin-top: 10px;
   display: none;
 ">
-  <div id="chop-progress-bar" style="
+  <div id="collection-progress-bar" style="
     height: 100%;
     width: 100%;
     background: #22c55e;
@@ -1220,7 +1220,6 @@
       document
         .getElementById('collect-item-btn')
         .addEventListener('click', (e) => {
-            e.stopPropagation();
             startItemCollectionCountdown(node);
         });
     });
