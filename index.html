@@ -6,24 +6,33 @@
   <meta http-equiv="Expires" content="0" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Eventually This May Be A Game</title>
+  <title>ERF</title>
   
   <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
 
   <style>
+  
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@700&family=VT323&display=swap');
+    
     body {
       margin: 0;
       padding: 0;
-      background-color: #2f4f2f;
-      font-family: Georgia, "Times New Roman", serif;
+      background-color: #000000;
+      font-family: "Courier New", monospace;
     }
-    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    
+    #map { 
+      position: absolute; 
+      top: 0; 
+      bottom: 0; 
+      width: 100%; 
+    }
     
     /* ==============================
-         Fullscreen Start Screen
-         ============================== */
-  
+       Fullscreen Start Screen
+       ============================== */
+    
     #start-overlay {
       position: fixed;
       inset: 0;
@@ -34,182 +43,208 @@
       align-items: center;
       justify-content: center;
     
-      padding: 24px;
       box-sizing: border-box;
+      padding: 20px;
     
-      background:
-        radial-gradient(
-          circle at center,
-          rgba(78, 96, 55, 0.96) 0%,
-          rgba(47, 79, 47, 0.98) 45%,
-          rgba(35, 53, 31, 1) 100%
-        );
-    
-      text-align: center;
-      color: #ead9b5;
+      background-color: #000000;
+      color: #fff;
+      font-family: "Courier New", monospace;
+      image-rendering: pixelated;
     }
-  
+      
     /* Game Title */
-  
     #start-overlay h1 {
-      margin: 0 0 8px;
+      margin: 0 0 12px;
     
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: clamp(36px, 8vw, 62px);
+      font-family: 'Press Start 2P', monospace;
+      font-size: clamp(36px, 8vw, 64px);
       font-weight: 900;
-      letter-spacing: 3px;
+      letter-spacing: 4px;  
     
-      color: #e6c77a;
+      /* Primary Coin Gold */
+      color: #FBC340;
     
+      /* Multi-layered Pixel Shadow using Coin Amber & Black outline */
       text-shadow:
-        3px 3px 0 #4a3218,
-        5px 5px 0 rgba(0, 0, 0, 0.55);
+        4px 4px 0 #EB933A,
+        8px 8px 0 #000000;
     }
-  
+    
     /* Tagline */
-  
+    
     #start-tagline {
       margin: 0 0 24px;
     
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 19px;
-      font-style: italic;
+      font-family: "Courier New", monospace;
+      font-size: 15px;
+      font-weight: bold;
     
-      color: #c8b48a;
+      /* Light Leaf Green Accent */
+      color: #68BC56;
+      text-shadow: 2px 2px 0 #000000;
     }
-  
-    /* Description */
-  
-    #start-description {
-      max-width: 420px;
-      margin: 0 0 18px;
     
+    /* Description Box */
+    
+    #start-description {
+      width: min(440px, 90vw);
+      box-sizing: border-box;
+    
+      margin: 0 0 16px;
+      padding: 16px 20px;
+    
+      /* Gold Border with Deep Forest Canopy Interior */
+      border: 4px solid #FBC340;
+      background-color: #142814;
+    
+      color: #FDE176;
+    
+      font-family: "Courier New", monospace;
       font-size: 14px;
       line-height: 1.5;
     
-      color: #d6c7a5;
+      /* Beveled Pixel Shadow using Bark & Dark Stone */
+      box-shadow:
+        inset -4px -4px 0 #267A26,
+        inset 4px 4px 0 #503E0E,
+        6px 6px 0 #000000;
     }
-  
-    /* Development Notice */
-  
-    #dev-notice {
-      max-width: 420px;
-      margin: 0 0 24px;
-      padding: 10px 16px;
     
+    /* Development Notice */
+    
+    #dev-notice {
+      width: min(440px, 90vw);
       box-sizing: border-box;
     
-      border: 1px solid #76572f;
-      border-radius: 4px;
+      margin: 0 0 20px;
+      padding: 10px 14px;
     
-      background: rgba(48, 38, 24, 0.55);
+      /* Amber Hazard Look */
+      border: 2px dashed #EB933A;
+      background-color: #261b09;
     
-      font-size: 13px;
+      color: #FDE176;
+    
+      font-family: "Courier New", monospace;
+      font-size: 12px;
       line-height: 1.4;
+      box-shadow: 4px 4px 0 #000000;
+    }
     
-      color: #bfae87;
-    }
-  
     #dev-notice strong {
-      color: #e0c98f;
+      color: #FBC340;
+      text-transform: uppercase;
     }
-  
+    
     /* Coming Eventually */
-  
+    
     #start-todo {
-      width: min(100%, 360px);
-      margin: 0 0 26px;
-  
-      text-align: left;
+      width: min(440px, 90vw);
+      box-sizing: border-box;
+    
+      margin-bottom: 24px;
+      padding: 12px 16px;
+    
+      /* Stone Dark Slate Panel */
+      background: #181b20;
+      border: 2px solid #656D7C;
+    
+      color: #8B929E;
+      box-shadow: 4px 4px 0 #000000;
     }
-  
+    
     #start-todo h3 {
       margin: 0 0 8px;
     
+      font-family: "Courier New", monospace;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: bold;
       letter-spacing: 2px;
       text-transform: uppercase;
     
-      color: #b89b62;
+      /* Bright Coin Gold */
+      color: #FBC340;
+      text-shadow: 1px 1px 0 #000000;
     }
-  
+    
     #start-todo ul {
       margin: 0;
       padding: 0;
-  
       list-style: none;
     }
-  
+    
     #start-todo li {
-      padding: 7px 0;
+      padding: 3px 0;
     
-      border-bottom: 1px solid rgba(150, 120, 70, 0.25);
+      font-family: "Courier New", monospace;
+      font-size: 13px;
     
-      font-size: 14px;
-      color: #d8c8a4;
+      color: #ffffff;
     }
-  
-    #start-todo li::before {
-      content: "⚒";
-      display: inline-block;
-      width: 26px;
     
-      color: #c49a55;
+    #start-todo li::before {
+      content: "◆ ";
+      color: #68BC56;
     }
     
     #start-todo small {
-      color: #9e8b67;
+      color: #8B929E;
     }
-  
+    
     /* Start Button */
-  
+    
     #start-btn {
-      width: auto;
-      min-width: 180px;
-      max-width: 280px;
+      width: min(280px, 80vw);
+      padding: 12px 20px;
     
-      padding: 13px 28px;
-      box-sizing: border-box;
+      /* Solid White Border for High Contrast */
+      border: 2px solid #ffffff;
+      border-radius: 0;
     
-      border: 2px solid #8c6a38;
-      border-radius: 5px;
+      /* Player Cloak Green Base */
+      background-color: #4CA940;
     
-      background: #5d7a3a;
-      color: #f0dfb2;
+      color: #ffffff;
     
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 16px;
-      font-weight: 700;
+      font-family: "Courier New", monospace;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 1px;
     
       cursor: pointer;
     
+      /* 3D Pixel Inset using Deep Forest Green & Light Canopy Green */
       box-shadow:
-        0 4px 0 #3d5127,
-        inset 0 1px 0 rgba(255,255,255,0.15);
-    
-      transition:
-        background 0.15s ease,
-        transform 0.1s ease,
-        box-shadow 0.1s ease;
+        inset -4px -4px 0 #267A26,
+        inset 4px 4px 0 #68BC56,
+        6px 6px 0 #000000;
+      
+      transition: transform 0.05s, background-color 0.05s;
     }
     
     #start-btn:hover {
-      background: #6f9045;
+      background-color: #68BC56;
+      color: #FDE176;
     }
     
     #start-btn:active {
-      transform: translateY(3px);
-      box-shadow: 0 1px 0 #3d5127;
+      transform: translate(4px, 4px);
+      box-shadow:
+        inset -4px -4px 0 #267A26,
+        inset 4px 4px 0 #68BC56,
+        2px 2px 0 #000000;
     }
-  
+    
     /* Status */
-  
+    
     #start-status {
       min-height: 20px;
-      margin-top: 10px;
-      font-size: 14px;
-      color: #b8c98a;
+      margin-top: 14px;
+    
+      font-family: "Courier New", monospace;
+      font-size: 12px;
+    
+      color: #FDE176;
     }
 
     #ui-panel {
@@ -595,15 +630,14 @@
 <!-- Start Screen Overlay -->
 <div id="start-overlay">
 
-  <h1>WANDERFORGE</h1>
+  <h1>ERF</h1>
 
   <div id="start-tagline">
-    Your world. Your journey.
+    It's like Earth, but the people are programmed to like you.
   </div>
 
   <div id="start-description">
-    Explore the world around you, gather resources, take on quests,
-    craft your gear, and build your own place in the world.
+    Explore the surrounding void, whack trees and stone for resources, do errands for mild-mannered villagers, craft stuff, and build a place to hide from responsibilities.
   </div>
 
   <div id="dev-notice">
@@ -617,13 +651,12 @@
     <ul>
       <li>Crafting</li>
       <li>Weapons &amp; Combat <small>(against what? who knows)</small></li>
-      <li>Markets &amp; Trading</li>
-      <li>Houses &amp; Building</li>
+      <li>Houses/Buildings</li>
     </ul>
   </div>
 
   <button id="start-btn" class="btn gps-btn">
-    Start Here
+    ▶ START HERE
   </button>
 
   <div id="start-status"></div>
@@ -648,7 +681,7 @@
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
   <div id="status">GPS Active</div>
-  <button id="autocenter-button" class="btn autocenter-on">🎯 Auto-Center: ON</button>
+  <button id="autocenter-button" class="btn autocenter-on">Auto-Center: ON</button>
   
   <div id="plot-card">
     <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
@@ -854,14 +887,14 @@
     
       mainImage: 'stone.png',
       collectedImage: 'stone_empty.png',
-      zoomImage: 'stone_small.png',
+      zoomImage: 'stone.png',
     
       requiredTool: 'mining pick',
     
       count: 10,
     
-      normalWidth: 72,
-      normalHeight: 72,
+      normalWidth: 48,
+      normalHeight: 48,
       zoomWidth: 48,
       zoomHeight: 48,
       zoomThreshold: 17.75,
@@ -2081,10 +2114,10 @@
     const btn = document.getElementById('autocenter-button');
     if (autoCenterEnabled) {
       btn.className = 'btn autocenter-on';
-      btn.innerText = '🎯 Auto-Center: ON';
+      btn.innerText = 'Auto-Center: ON';
     } else {
       btn.className = 'btn autocenter-off';
-      btn.innerText = '📍 Auto-Center: OFF (Tap to Lock)';
+      btn.innerText = 'Auto-Center: OFF (Tap to Lock)';
     }
   }
   
