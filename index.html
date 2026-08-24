@@ -194,15 +194,16 @@
     
     #start-btn {
       width: min(280px, 80vw);
-      padding: 14px 20px;
+      padding: 12px 20px;
     
-      border: 3px solid #FBC340;
+      border: 3px solid #72552A;
       border-radius: 0;
     
-      /* Rich Amber Base */
-      background-color: #EB933A;
+      /* Deep Bark Brown Base */
+      background-color: #503E0E;
     
-      color: #000000;
+      /* Muted Gold Text */
+      color: #FBC340;
     
       font-family: "Courier New", monospace;
       font-size: 18px;
@@ -211,25 +212,25 @@
     
       cursor: pointer;
     
-      /* 3D Pixel Bevel using Gold Highlights and Bark Shadows */
+      /* Subtle 3D Bevel with Bark Highlights and Black Shadow */
       box-shadow:
-        inset -4px -4px 0 #72552A,
-        inset 4px 4px 0 #FDE176,
+        inset -4px -4px 0 #261b09,
+        inset 4px 4px 0 #72552A,
         6px 6px 0 #000000;
       
-      transition: transform 0.05s, background-color 0.05s;
+      transition: transform 0.05s, background-color 0.05s, color 0.05s;
     }
     
     #start-btn:hover {
-      background-color: #FBC340;
-      color: #000000;
+      background-color: #72552A;
+      color: #FDE176;
     }
     
     #start-btn:active {
       transform: translate(4px, 4px);
       box-shadow:
-        inset -4px -4px 0 #72552A,
-        inset 4px 4px 0 #FDE176,
+        inset -4px -4px 0 #261b09,
+        inset 4px 4px 0 #72552A,
         2px 2px 0 #000000;
     }
     
@@ -266,8 +267,8 @@
     /* Close Button (inside #ui-panel) */
     #close-ui-btn {
       position: absolute;
-      top: 10px;
-      right: 12px;
+      top: 6px;
+      right: 6px;
       background: transparent;
       border: none;
       color: #94a3b8;
@@ -341,8 +342,8 @@
 	
     #close-inventory-btn {
       position: absolute;
-      top: 10px;
-      right: 12px;
+      top: 6px;
+      right: 6px;
       background: transparent;
       border: none;
       color: #94a3b8;
