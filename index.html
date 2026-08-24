@@ -46,7 +46,14 @@
       box-sizing: border-box;
       padding: 20px;
     
-	  background-color: #000000;
+      background-color: #3E7B41;
+    
+      background-image:
+        linear-gradient(#243A3C 2px, transparent 2px),
+        linear-gradient(90deg, #243A3C 2px, transparent 2px);
+    
+      background-size: 150px 150px;
+    
       color: #fff;
       font-family: "Courier New", monospace;
       image-rendering: pixelated;
@@ -78,8 +85,7 @@
       font-size: 15px;
       font-weight: bold;
     
-      /* Light Leaf Green Accent */
-      color: #68BC56;
+      color: #FA9D3E;
       text-shadow: 2px 2px 0 #000000;
     }
     
@@ -866,7 +872,7 @@
   
       requiredTool: 'axe',
   
-      count: 20,
+      percentage: 30, //30 percent chance that a tile can be a tree
   
       normalWidth: 96,
       normalHeight: 96,
@@ -890,7 +896,7 @@
     
       requiredTool: 'mining pick',
     
-      count: 10,
+      percentage: 20, //20 percent chance that a tile can be stone
     
       normalWidth: 48,
       normalHeight: 48,
@@ -1057,7 +1063,6 @@
       clearItems();
   
       const gridRadius = 4;
-      const occupiedCells = new Set();
   
       // Build the complete 9x9 grid.
       const candidateCells = [];
@@ -1071,105 +1076,103 @@
           }
       }
   
-      // Process every resource type.
-      for (const itemKey in ITEM_DEFS) {
-          const def = ITEM_DEFS[itemKey];
+      // Each tile independently determines whether it contains a resource.
+      for (const cell of candidateCells) {
   
-          // Give every tile a deterministic score for this resource type.
-          const rankedCells = candidateCells
-              .map(cell => ({
-                  ...cell,
-                  score: getItemPlacementScore(
-                      cell.gridX,
-                      cell.gridY,
-                      def.id
-                  )
-              }))
-              .sort((a, b) => b.score - a.score);
+          const tileKey = `${cell.gridY}_${cell.gridX}`;
   
-          let placed = 0;
+          // Determine which resource, if any, belongs on this tile.
+          let selectedDef = null;
   
-          for (const cell of rankedCells) {
-              if (placed >= def.count) break;
+          for (const itemKey in ITEM_DEFS) {
+              const def = ITEM_DEFS[itemKey];
   
-              const tileKey = `${cell.gridY}_${cell.gridX}`;
-  
-              // Another resource already occupies this tile.
-              if (occupiedCells.has(tileKey)) continue;
-  
-              occupiedCells.add(tileKey);
-              placed++;
-  
-              const itemLat =
-                  (cell.gridY + 0.50) * LAT_GRID_SIZE_DEG;
-  
-              const itemLng =
-                  (cell.gridX + 0.50) * LNG_GRID_SIZE_DEG;
-  
-              // Check whether this exact resource on this exact tile
-              // is currently collected.
-              const storageKey =
-                  getItemStorageKey(def, tileKey);
-  
-              const collectedAt = parseInt(
-                  localStorage.getItem(storageKey) || '0',
-                  10
+              const score = getItemPlacementScore(
+                  cell.gridX,
+                  cell.gridY,
+                  def.id
               );
   
-              const isCollected =
-                  collectedAt > 0 &&
-                  Date.now() - collectedAt < def.respawnMs;
-  
-              const container = document.createElement('div');
-              container.className = 'item-marker-container';
-  
-              const img = document.createElement('img');
-              img.className = 'item-marker-icon';
-  
-              img.src = isCollected
-                  ? def.collectedImage
-                  : def.mainImage;
-  
-              container.appendChild(img);
-  
-              const marker = new maplibregl.Marker({
-                  element: container,
-                  anchor: 'center'
-              })
-                  .setLngLat([itemLng, itemLat])
-                  .addTo(map);
-  
-              const node = {
-                  id: `${def.id}_${tileKey}`,
-                  itemType: def.id,
-                  def,
-                  tileKey,
-                  lat: itemLat,
-                  lng: itemLng,
-                  marker,
-                  element: container,
-                  img,
-                  isCollected
-              };
-  
-              if (isCollected) {
-                  container.style.pointerEvents = 'none';
+              if (score < def.percentage / 100) {
+                  selectedDef = def;
+                  break;
               }
-  
-              activeItemNodes.push(node);
-  
-              container.addEventListener('click', e => {
-                  e.stopPropagation();
-  
-                  if (node.isCollected) return;
-  
-                  closeBackpackIfOpen(false);
-                  clearSelectedPlot();
-                  ensureUIPanelVisible();
-  
-                  renderItemCard(node);
-              });
           }
+  
+          // No resource on this tile.
+          if (!selectedDef) continue;
+  
+          const def = selectedDef;
+  
+          const itemLat =
+              (cell.gridY + 0.50) * LAT_GRID_SIZE_DEG;
+  
+          const itemLng =
+              (cell.gridX + 0.50) * LNG_GRID_SIZE_DEG;
+  
+          // Check whether this exact resource on this exact tile
+          // is currently collected.
+          const storageKey =
+              getItemStorageKey(def, tileKey);
+  
+          const collectedAt = parseInt(
+              localStorage.getItem(storageKey) || '0',
+              10
+          );
+  
+          const isCollected =
+              collectedAt > 0 &&
+              Date.now() - collectedAt < def.respawnMs;
+  
+          const container = document.createElement('div');
+          container.className = 'item-marker-container';
+  
+          const img = document.createElement('img');
+          img.className = 'item-marker-icon';
+  
+          img.src = isCollected
+              ? def.collectedImage
+              : def.mainImage;
+  
+          container.appendChild(img);
+  
+          const marker = new maplibregl.Marker({
+              element: container,
+              anchor: 'center'
+          })
+              .setLngLat([itemLng, itemLat])
+              .addTo(map);
+  
+          const node = {
+              id: `${def.id}_${tileKey}`,
+              itemType: def.id,
+              def,
+              tileKey,
+              lat: itemLat,
+              lng: itemLng,
+              marker,
+              element: container,
+              img,
+              isCollected
+          };
+  
+          if (isCollected) {
+              container.style.pointerEvents = 'none';
+          }
+  
+          activeItemNodes.push(node);
+  
+          container.addEventListener('click', e => {
+              e.stopPropagation();
+  
+              if (node.isCollected) return;
+  
+              closeBackpackIfOpen(false);
+              clearSelectedPlot();
+              ensureUIPanelVisible();
+  
+              renderItemCard(node);
+          });
       }
   
       updateItemVisibility();
@@ -1612,16 +1615,17 @@
   
       npcNodes[def.id]?.marker?.remove();
       npcNodes[def.id] = null;
-  
+      
       updateGoldDisplay();
       updateInventoryDisplay();
       updateAllQuestIndicators();
-  
+      
       document.getElementById("status").innerText = `Acquired ${def.tradeItem}!`;
-      document.getElementById("plot-info").innerHTML = `
-          <b>${def.name}:</b><br/>
-          <small style="color:#94a3b8;">They have left the forest.</small>
-      `;
+      
+      // NPC has left, so clear their card from the UI.
+      stopLiveDistanceUpdates();
+      clearSelectedPlot();
+      renderSelectedPlotCard();
   }
   
   function isQuestAccepted(questId) {
@@ -1835,17 +1839,13 @@
               playerGold += node.value;
               localStorage.setItem('rpg_player_gold', playerGold);
               updateGoldDisplay();
-			  showGoldPopup(node.value);
-  
-              const rarityText = node.value >= 4 ? '🌟 JACKPOT!' : '✨';
-              document.getElementById('status').innerText =
-                  `${rarityText} Picked up +${node.value} Gold!`;
-  
+              showGoldPopup(node.value);
+          
               node.marker.remove();
-  
+          
               const idx = activeGoldNodes.indexOf(node);
               if (idx !== -1) activeGoldNodes.splice(idx, 1);
-  
+          
               renderSelectedPlotCard();
           }
       }
