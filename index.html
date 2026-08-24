@@ -2221,7 +2221,13 @@
   });
 
   document.getElementById('start-btn').addEventListener('click', () => {
+    const startBtn = document.getElementById('start-btn');
+
+    startBtn.innerText = 'LOADING...';
+    startBtn.disabled = true;
+
     document.getElementById('start-status').innerText = 'Acquiring GPS fix...';
+
     geolocate.trigger();
   });
 
