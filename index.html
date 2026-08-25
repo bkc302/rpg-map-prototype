@@ -325,6 +325,12 @@
 	  display: none;
     }
 	
+    #toggle-ui-btn,
+    #inventory-btn {
+      font-family: "Courier New", monospace;
+      font-size: 16px;
+    }
+	
     #inventory-btn:hover {
       background: #21262d;
       border-color: #8b949e;
@@ -379,6 +385,7 @@
     
       z-index: 200;
       color: #ffd700;
+	  font-family: "Courier New", monospace;
       font-weight: bold;
       font-size: 18px;
       white-space: nowrap;
@@ -446,6 +453,38 @@
     }
     .claimed { background-color: #2563eb; color: #fff; }
     .wild { background-color: #10b981; color: #fff; }
+	
+    /* Bottom-Right Auto-Center Widget */
+    .autocenter-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 16px;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.85);
+      border: 2px solid #334155;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 0;
+      outline: none;
+      transition: border-color 0.2s, transform 0.1s;
+    }
+    
+    .autocenter-btn:active {
+      transform: scale(0.92);
+    }
+    
+    /* Blue highlight when Auto-Center is ON */
+    .autocenter-btn.active {
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+    }
 	
     /* Bottom-Left Compass Widget */
     .compass-btn {
@@ -686,7 +725,6 @@
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
   <div id="status">GPS Active</div>
-  <button id="autocenter-button" class="btn autocenter-on">Auto-Center: ON</button>
   
   <div id="plot-card">
     <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
@@ -716,6 +754,63 @@
 </div>
 
 <div id="map"></div>
+
+<!-- Floating Auto-Center (Bottom-Right) -->
+<button
+  id="autocenter-button"
+  class="autocenter-btn active"
+  title="Toggle Auto-Center"
+  aria-label="Toggle Auto-Center"
+>
+  <svg viewBox="0 0 24 24" width="28" height="28">
+    <circle
+      cx="12"
+      cy="12"
+      r="8"
+      fill="none"
+      stroke="#e2e8f0"
+      stroke-width="2"
+    />
+    <circle
+      cx="12"
+      cy="12"
+      r="3"
+      fill="#38bdf8"
+    />
+    <line
+      x1="12"
+      y1="1"
+      x2="12"
+      y2="5"
+      stroke="#e2e8f0"
+      stroke-width="2"
+    />
+    <line
+      x1="12"
+      y1="19"
+      x2="12"
+      y2="23"
+      stroke="#e2e8f0"
+      stroke-width="2"
+    />
+    <line
+      x1="1"
+      y1="12"
+      x2="5"
+      y2="12"
+      stroke="#e2e8f0"
+      stroke-width="2"
+    />
+    <line
+      x1="19"
+      y1="12"
+      x2="23"
+      y2="12"
+      stroke="#e2e8f0"
+      stroke-width="2"
+    />
+  </svg>
+</button>
 
 <!-- Floating Compass (Bottom-Left) -->
 <button id="compass-btn" class="compass-btn" title="Reset North / Toggle Compass">
@@ -747,7 +842,7 @@
   let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) || 0 : 0;
   
   const PLOT_PRICE = 100;
-  const MIN_START_ACCURACY_FEET = 50;
+  const MIN_START_ACCURACY_FEET = 5000;
   const ITEM_COLLECTION_RADIUS_FEET = 150;
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
@@ -785,6 +880,11 @@
           tradeItem: "axe",
           tradeType: "gold",
           price: 20,
+		  
+		  tradeText: "A good axe is worth its weight in gold. Need one?",
+  
+          appearsOnQuest: "bramble_intro_quest",
+  
           disabledKey: "rpg_npc_disabled_pete"
       },
   
@@ -799,6 +899,11 @@
           tradeItem: "mining pick",
           tradeType: "wood",
           price: 20,
+		  
+		  tradeText: "I'm running short on good handles. Bring me some wood and I'll make you a mining pick.",
+  
+          appearsOnQuest: "bramble_second_quest",
+  
           disabledKey: "rpg_npc_disabled_gus"
       }
   };
@@ -1229,60 +1334,65 @@
   }
 
   function collectItem(node) {
-    const def = node.def;
+      const def = node.def;
   
-    if (!playerInventory.has(def.requiredTool)) return;
-    if (node.isCollected) return;
+      if (!playerInventory.has(def.requiredTool)) return;
+      if (node.isCollected) return;
   
-    const yieldWeights = def.yieldWeights;
-    
-    const yieldAmount =
-      yieldWeights[Math.floor(Math.random() * yieldWeights.length)];
-    
-    const storageKey = `rpg_resource_${def.resourceName}`;
-    
-    const savedAmount = parseInt(
-      localStorage.getItem(storageKey) || '0',
-      10
-    );
-    
-    const newAmount = savedAmount + yieldAmount;
-    
-    localStorage.setItem(storageKey, newAmount);
+      // Immediately lock this node.
+      node.isCollected = true;
   
-    node.isCollected = true;
+      // Persist the collected state immediately.
+      const itemStorageKey = getItemStorageKey(def, node.tileKey);
+      localStorage.setItem(
+          itemStorageKey,
+          Date.now().toString()
+      );
   
-    localStorage.setItem(
-      getItemStorageKey(def, node.tileKey),
-      Date.now().toString()
-    );
+      // Give the player the resource.
+      const yieldWeights = def.yieldWeights;
   
-    updateInventoryDisplay();
+      const yieldAmount =
+          yieldWeights[Math.floor(Math.random() * yieldWeights.length)];
   
-    node.img.src = def.collectedImage;
-    node.element.style.pointerEvents = 'none';
+      const storageKey = `rpg_resource_${def.resourceName}`;
   
-    document.getElementById('status').innerText =
-      `Collected +${yieldAmount} ${def.name}!`;
+      const savedAmount = parseInt(
+          localStorage.getItem(storageKey) || '0',
+          10
+      );
   
-    stopLiveDistanceUpdates();
+      const newAmount = savedAmount + yieldAmount;
   
-    renderCollectedItemCard(node);
+      localStorage.setItem(storageKey, newAmount);
+  
+      // Force the collected visual state.
+      node.img.src = def.collectedImage;
+      node.element.style.pointerEvents = 'none';
+  
+      updateInventoryDisplay();
+  
+      document.getElementById('status').innerText =
+          `Collected +${yieldAmount} ${def.name}!`;
+  
+      stopLiveDistanceUpdates();
+  
+      renderCollectedItemCard(node);
   }
 
-function renderCollectedItemCard(node) {
-  const container = document.getElementById('plot-info');
-
-  container.innerHTML = `
-    <b>${node.def.name}</b><br/>
-    <span style="color:#ffffff;">
-      This resource has been collected.
-    </span><br/>
-    <small style="color:#f1f5f9;">
-      Respawns in ${node.def.respawnMs / 60000} minutes.
-    </small>
-  `;
-}
+  function renderCollectedItemCard(node) {
+    const container = document.getElementById('plot-info');
+  
+    container.innerHTML = `
+      <b>${node.def.name}</b><br/>
+      <span style="color:#ffffff;">
+        This resource has been collected.
+      </span><br/>
+      <small style="color:#f1f5f9;">
+        Respawns in ${node.def.respawnMs / 60000} minutes.
+      </small>
+    `;
+  }
   
   function updateItemVisibility() {
     const zoom = map.getZoom();
@@ -1391,6 +1501,12 @@ function renderCollectedItemCard(node) {
   }
   
   function spawnNPC(def) {
+  
+      // NPC does not appear until their required quest is accepted.
+      if (def.appearsOnQuest && !isQuestAccepted(def.appearsOnQuest)) {
+          return;
+      }
+  
       const disabled = localStorage.getItem(def.disabledKey) === "true";
       if (disabled) return;
       if (!userLat || !userLng) return;
@@ -1541,7 +1657,7 @@ function renderCollectedItemCard(node) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
                   <b>Distance:</b> ${distRounded} ft away<br/>
-                  <small style="color:#ef4444;">Walk within ${def.talkRadius} ft to trade.</small>
+                  <small style="color:#f7f7f7;">Walk within ${def.talkRadius} ft to trade.</small>
               `;
               return;
           }
@@ -1566,7 +1682,7 @@ function renderCollectedItemCard(node) {
   
           container.innerHTML = `
               <b>${def.name}:</b><br/>
-              <i>"Looking to trade?"</i><br/>
+              <i>"${def.tradeText}"</i><br/>
               <b>Item:</b> ${def.tradeItem}<br/>
               <b>Cost:</b> ${requirementLabel}<br/>
               <button id="npc-buy-btn" class="btn buy-btn" ${canAfford ? "" : "disabled"}>
@@ -1705,7 +1821,7 @@ function renderCollectedItemCard(node) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
                   <b>Distance:</b> ${dist} ft away<br/>
-                  <small style="color:#ef4444;">Walk within ${def.talkRadius} ft to talk.</small>
+                  <small style="color:#f7f7f7;">Walk within ${def.talkRadius} ft to talk.</small>
               `;
               return;
           }
@@ -1727,14 +1843,24 @@ function renderCollectedItemCard(node) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
                   <i>${dialog.offer}</i><br/>
-                  <button id="quest-accept-btn" class="btn buy-btn" style="margin-top:6px;">✅ Accept Quest</button>
+                  <button id="quest-accept-btn" class="btn buy-btn" style="margin-top:6px;">Accept Quest</button>
               `;
   
-              document.getElementById('quest-accept-btn').addEventListener('click', () => {
-                  acceptQuest(nextQuest.questId);
-                  updateQuestIndicator(def);
-                  renderQuestNPC(def);
-              });
+               document.getElementById('quest-accept-btn').addEventListener('click', () => {
+                   acceptQuest(nextQuest.questId);
+               
+                   // Spawn any NPC that becomes available from this quest.
+                   for (const key in NPC_DEFS) {
+                       const npcDef = NPC_DEFS[key];
+               
+                       if (npcDef.appearsOnQuest === nextQuest.questId) {
+                           spawnNPC(npcDef);
+                       }
+                   }
+               
+                   updateQuestIndicator(def);
+                   renderQuestNPC(def);
+               });
               return;
           }
   
@@ -1751,7 +1877,7 @@ function renderCollectedItemCard(node) {
           container.innerHTML = `
               <b>${def.name}:</b><br/>
               <i>${dialog.readyToTurnIn}</i><br/>
-              <button id="quest-turnin-btn" class="btn buy-btn" style="margin-top:6px;">🎁 Turn In Quest</button>
+              <button id="quest-turnin-btn" class="btn buy-btn" style="margin-top:6px;">Turn In Quest</button>
           `;
   
           document.getElementById('quest-turnin-btn').addEventListener('click', () => {
@@ -1964,7 +2090,7 @@ function renderCollectedItemCard(node) {
               container.innerHTML = `
                   <b>${valueLabel}:</b> +${coinValue} Gold<br/>
                   <b>Distance:</b> ${distRounded} ft away<br/>
-                  <small style="color:#94a3b8;">Walk within 150 ft to pick up!</small>
+                  <small style="color:#f7f7f7;">Walk within 150 ft to pick up!</small>
               `;
           });
       });
@@ -2124,14 +2250,13 @@ function updateInventoryDisplay() {
   }
 
   function updateAutoCenterUI() {
-    const btn = document.getElementById('autocenter-button');
-    if (autoCenterEnabled) {
-      btn.className = 'btn autocenter-on';
-      btn.innerText = 'Auto-Center: ON';
-    } else {
-      btn.className = 'btn autocenter-off';
-      btn.innerText = 'Auto-Center: OFF (Tap to Lock)';
-    }
+      const btn = document.getElementById('autocenter-button');
+  
+      if (autoCenterEnabled) {
+          btn.classList.add('active');
+      } else {
+          btn.classList.remove('active');
+      }
   }
   
   function ensureUIPanelVisible() {
@@ -2246,11 +2371,16 @@ function updateInventoryDisplay() {
   });
 
   document.getElementById('autocenter-button').addEventListener('click', () => {
-    autoCenterEnabled = !autoCenterEnabled;
-    updateAutoCenterUI();
-    if (autoCenterEnabled && userLat && userLng) {
-      map.flyTo({ center: [userLng, userLat], zoom: 17.95, essential: true });
-    }
+      autoCenterEnabled = !autoCenterEnabled;
+      updateAutoCenterUI();
+  
+      if (autoCenterEnabled && userLat && userLng) {
+          map.flyTo({
+              center: [userLng, userLat],
+              zoom: 17.95,
+              essential: true
+          });
+      }
   });
   
   // Toggle Panel Visibility Listeners
