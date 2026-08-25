@@ -6,7 +6,7 @@
   <meta http-equiv="Expires" content="0" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>WAYFARE</title>
+  <title>WAYFARER</title>
   
   <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
@@ -674,7 +674,7 @@
 <!-- Start Screen Overlay -->
 <div id="start-overlay">
 
-  <h1>WAYFARE</h1>
+  <h1>WAYFARER</h1>
 
   <div id="start-tagline">
     Your world. Your journey.
@@ -842,7 +842,7 @@
   let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) || 0 : 0;
   
   const PLOT_PRICE = 100;
-  const MIN_START_ACCURACY_FEET = 5000;
+  const MIN_START_ACCURACY_FEET = 50;
   const ITEM_COLLECTION_RADIUS_FEET = 150;
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
