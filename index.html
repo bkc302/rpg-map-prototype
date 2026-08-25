@@ -996,7 +996,7 @@
       resourceName: 'stone',
     
       mainImage: 'stone.png',
-      collectedImage: 'stone_empty.png',
+      collectedImage: '',
       zoomImage: 'stone.png',
     
       requiredTool: 'mining pick',
@@ -1235,9 +1235,15 @@
           const img = document.createElement('img');
           img.className = 'item-marker-icon';
   
-          img.src = isCollected
-              ? def.collectedImage
-              : def.mainImage;
+          if (isCollected) {
+              if (def.collectedImage) {
+                  img.src = def.collectedImage;
+              } else {
+                  img.style.display = 'none';
+              }
+          } else {
+              img.src = def.mainImage;
+          }
   
           container.appendChild(img);
   
@@ -1367,7 +1373,11 @@
       localStorage.setItem(storageKey, newAmount);
   
       // Force the collected visual state.
-      node.img.src = def.collectedImage;
+      if (def.collectedImage) {
+          node.img.src = def.collectedImage;
+      } else {
+          node.img.style.display = 'none';
+      }
       node.element.style.pointerEvents = 'none';
   
       updateInventoryDisplay();
