@@ -2044,25 +2044,39 @@ function renderCollectedItemCard(node) {
       document.getElementById('inv-gold-amount').innerText = playerGold;
   }
 
-  function updateInventoryDisplay() {
-      const items = [];
-  
-      if (playerInventory.has('axe')) items.push('🪓 Axe');
-      if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
-      
-      const woodAmount = parseInt(
-          localStorage.getItem('rpg_resource_wood') || '0',
-          10
-      );
-      
-      if (woodAmount > 0) {
-          items.push(`🪵 Wood x${woodAmount}`);
-      }
-  
-      const listText = items.length > 0 ? items.join(', ') : 'Empty';
-  
-      document.getElementById('inv-items-list').innerText = listText;
-  }
+function updateInventoryDisplay() {
+    const items = [];
+
+    if (playerInventory.has('axe')) {
+        items.push('🪓 Axe');
+    }
+
+    if (playerInventory.has('mining pick')) {
+        items.push('⛏️ Mining Pick');
+    }
+
+    const woodAmount = parseInt(
+        localStorage.getItem('rpg_resource_wood') || '0',
+        10
+    );
+
+    if (woodAmount > 0) {
+        items.push(`🪵 Wood x${woodAmount}`);
+    }
+
+    const stoneAmount = parseInt(
+        localStorage.getItem('rpg_resource_stone') || '0',
+        10
+    );
+
+    if (stoneAmount > 0) {
+        items.push(`🪨 Stone x${stoneAmount}`);
+    }
+
+    const listText = items.length > 0 ? items.join(', ') : 'Empty';
+
+    document.getElementById('inv-items-list').innerText = listText;
+}
 
   function renderSelectedPlotCard() {
     const container = document.getElementById('plot-info');
