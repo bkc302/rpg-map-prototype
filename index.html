@@ -941,13 +941,45 @@
                   requiredItems: ["mining pick"],
                   rewardGold: 30,
                   rewardItems: [],
-                  disappearOnComplete: false,
+                  disappearOnComplete: true,
   
                   dialog: {
                       offer: "Now that you have that shiny new axe, go cut down some trees and gather wood. Miner Gus will trade you a mining pick for 20 wood. Will you take on this task?",
                       inProgress: "Keep chopping! You’ll need enough wood to trade with Miner Gus.",
                       readyToTurnIn: "Well done! With that mining pick, you’re ready to gather stone and ore.",
                       completed: "Here's 30 gold for your effort. You've proven yourself again, adventurer."
+                  }
+              }
+          ]
+      },
+	  
+      beginnerQuestGrubwick: {
+          id: "beginnerQuestGrubwick",
+          name: "Grubwick",
+          img: "grubwick.png",
+          talkRadius: 150,
+          spawnRadius: 2,
+          offsetX: 0.25,
+          offsetY: 0.80,
+      
+          appearsAfterQuest: "bramble_second_quest",
+      
+          quests: [
+              {
+                  questId: "grubwick_crafting_quest",
+                  requiredItems: ["wooden sword"],
+                  rewardGold: 50,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+      
+                  dialog: {
+                      offer: "Ah! There you are, adventurer! I have a little challenge for you. First, buy yourself a plot of land and build a crafting station. Pick somewhere you visit often—you'll be using that station plenty! Once you've got it built, gather what you need and craft yourself a wooden sword. Think you can manage that?",
+                      
+                      inProgress: "Still working on that crafting station and wooden sword? Remember, it's best to build your station somewhere you visit often. You'll be using it again and again!",
+                      
+                      readyToTurnIn: "Ha! Now that's a proper adventurer's weapon! A wooden sword isn't much to look at, but every great warrior has to start somewhere.",
+                      
+                      completed: "Excellent work! You've got yourself a place to craft and a sword to match. Here's 50 gold for your trouble. Keep that sword close—you never know what might be lurking out there!"
                   }
               }
           ]
@@ -1759,6 +1791,29 @@
       renderSelectedPlotCard();
   }
   
+  function spawnAvailableNPCs() {
+      // Merchant NPCs
+      for (const key in NPC_DEFS) {
+          const def = NPC_DEFS[key];
+  
+          if (!def.appearsOnQuest || isQuestAccepted(def.appearsOnQuest)) {
+              spawnNPC(def);
+          }
+      }
+  
+      // Quest NPCs
+      for (const key in QUEST_NPC_DEFS) {
+          const def = QUEST_NPC_DEFS[key];
+  
+          if (
+              !def.appearsAfterQuest ||
+              isQuestComplete(def.appearsAfterQuest)
+          ) {
+              spawnNPC(def);
+          }
+      }
+  }
+  
   function isQuestAccepted(questId) {
       return questState[questId] === 'accepted' || questState[questId] === true;
   }
@@ -1775,6 +1830,16 @@
   function completeQuest(questId) {
       questState[questId] = true;
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
+  }
+  
+  function spawnQuestNPCsUnlockedByQuest(questId) {
+      for (const key in QUEST_NPC_DEFS) {
+          const def = QUEST_NPC_DEFS[key];
+  
+          if (def.appearsAfterQuest === questId) {
+              spawnNPC(def);
+          }
+      }
   }
   
   function getQuestIndicatorState(def) {
@@ -1915,7 +1980,10 @@
               updateInventoryDisplay();
           
               completeQuest(nextQuest.questId);
-          
+              
+              // Spawn any quest NPCs unlocked by completing this quest.
+              spawnQuestNPCsUnlockedByQuest(nextQuest.questId);
+              
               document.getElementById('status').innerText = dialog.completed;
           
               if (nextQuest.disappearOnComplete && node.marker) {
@@ -2483,9 +2551,7 @@ function updateInventoryDisplay() {
         refreshMapGrid();
         spawnItems();
         initCoinSpawns();
-        spawnNPC(NPC_DEFS.timberPete);
-		spawnNPC(NPC_DEFS.minerGus);
-		spawnNPC(QUEST_NPC_DEFS.rangerBramble);
+        spawnAvailableNPCs();
         initNPCMovement();
 		
         map.jumpTo({ center: [userLng, userLat], zoom: 17.95 });
