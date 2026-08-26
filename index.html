@@ -379,24 +379,26 @@
 	border-bottom: 1px solid #30363d;
 	}
 	
-    .gold-popup-text {
+    .floating-popup-text {
       position: absolute;
       left: 50%;
-    
       z-index: 200;
-      color: #ffd700;
-	  font-family: "Courier New", monospace;
+      color: #ffd700; /* Default gold color */
+      font-family: "Courier New", monospace;
       font-weight: bold;
       font-size: 18px;
       white-space: nowrap;
       text-align: center;
-    
       text-shadow:
-        1px 1px 3px rgba(0,0,0,0.9),
+        1px 1px 3px rgba(0, 0, 0, 0.9),
         0 0 4px black;
-    
       animation: goldFloatUp 1.2s ease-out forwards;
       pointer-events: none;
+    }
+    
+    /* Optional custom color for item collection popups */
+    .floating-popup-text.item-popup {
+      color: #4ade80; /* Bright resource green (or pick any color) */
     }
     
     @keyframes goldFloatUp {
@@ -404,7 +406,6 @@
         transform: translate(-50%, 0);
         opacity: 1;
       }
-    
       100% {
         transform: translate(-50%, -70px);
         opacity: 0;
@@ -1383,6 +1384,9 @@
   
       updateInventoryDisplay();
   
+      // Trigger the item popup above the player's head
+      showItemPopup(yieldAmount, def.name);
+  
       document.getElementById('status').innerText =
           `Collected +${yieldAmount} ${def.name}!`;
   
@@ -1895,18 +1899,25 @@
               playerGold += nextQuest.rewardGold;
               updateGoldDisplay();
               localStorage.setItem("rpg_player_gold", playerGold);
-              showGoldPopup(nextQuest.rewardGold);
-  
+              
+              // Popup for Gold Reward
+              if (nextQuest.rewardGold > 0) {
+                  showFloatingPopup(`+${nextQuest.rewardGold} Gold`, false);
+              }
+          
+              // Popup(s) for Item Rewards
               for (const item of nextQuest.rewardItems) {
                   playerInventory.add(item);
+                  showFloatingPopup(`+1 ${item}`, true);
               }
+              
               localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
               updateInventoryDisplay();
-  
+          
               completeQuest(nextQuest.questId);
-  
+          
               document.getElementById('status').innerText = dialog.completed;
-  
+          
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
                   node.indicatorMarker?.remove();
@@ -1914,34 +1925,44 @@
               } else {
                   updateQuestIndicator(def);
               }
-  
+          
               renderQuestNPC(def);
           });
       });
   }
   
-  function showGoldPopup(amount) {
+  function showFloatingPopup(textString, isItem = false) {
     if (!userLat || !userLng) return;
   
-    // Wrapper handles positioning (maplibre sets transform on this),
-    // inner text handles the float/fade animation separately so they don't conflict.
     const wrapper = document.createElement('div');
     wrapper.style.pointerEvents = 'none';
   
-    const text = document.createElement('div');
-    text.className = 'gold-popup-text';
-    text.innerText = `+${amount} Gold`;
-    wrapper.appendChild(text);
+    const textElem = document.createElement('div');
+    textElem.className = isItem 
+      ? 'floating-popup-text item-popup' 
+      : 'floating-popup-text';
+    textElem.innerText = textString;
+    wrapper.appendChild(textElem);
   
     const popupMarker = new maplibregl.Marker({
       element: wrapper,
       anchor: 'bottom',
-      offset: [0, -40] // nudges it up above the player icon
+      offset: [0, -40] // Nudges above the player icon
     })
       .setLngLat([userLng, userLat])
       .addTo(map);
   
     setTimeout(() => popupMarker.remove(), 1200);
+  }
+  
+  // Wrapper for backward compatibility with existing gold calls
+  function showGoldPopup(amount) {
+    showFloatingPopup(`+${amount} Gold`, false);
+  }
+  
+  // Dedicated helper for item popups
+  function showItemPopup(amount, itemName) {
+    showFloatingPopup(`+${amount} ${itemName}`, true);
   }
   
   function collectCoin(node) {
@@ -2521,19 +2542,46 @@ function updateInventoryDisplay() {
       if (style && style.layers) {
         style.layers.forEach(layer => {
           const id = layer.id.toLowerCase();
-          if (id.includes('building')) map.setLayoutProperty(layer.id, 'visibility', 'none');
+  
+          // 1. Hide buildings
+          if (id.includes('building')) {
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+          }
+  
+          // 2. Water styling
           if (id.includes('water') || id.includes('river') || id.includes('lake') || id.includes('ocean')) {
             if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', '#2b65ec');
             else if (layer.type === 'line') map.setPaintProperty(layer.id, 'line-color', '#1d4ed8');
           }
-          if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
+  
+          // 3. Background styling
+          if (layer.type === 'background') {
+            map.setPaintProperty(layer.id, 'background-color', '#3e7b41');
+          }
+  
+          // 4. Land / Parks styling
           if ((id.includes('land') || id.includes('park') || id.includes('green') || id.includes('wood')) && layer.type === 'fill' && !id.includes('water')) {
             map.setPaintProperty(layer.id, 'fill-color', '#488a4b');
           }
-          if ((id.includes('road') || id.includes('highway') || id.includes('street')) && layer.type === 'line') {
-            map.setPaintProperty(layer.id, 'line-color', id.includes('case') ? '#5c4028' : '#9e7853');
+  
+          // 5. Roads, Highways, Streets, and BRIDGES
+          if ((id.includes('road') || id.includes('highway') || id.includes('street') || id.includes('bridge') || id.includes('tunnel')) && layer.type === 'line') {
+            if (id.includes('bridge')) {
+              // Dark brown for wooden bridges
+              map.setPaintProperty(layer.id, 'line-color', '#63462a'); 
+            } else if (id.includes('case')) {
+              // Darker casing border for roads
+              map.setPaintProperty(layer.id, 'line-color', '#5c4028');
+            } else {
+              // Normal light dirt-path roads
+              map.setPaintProperty(layer.id, 'line-color', '#9e7853');
+            }
           }
-          if (layer.type === 'symbol') map.setLayoutProperty(layer.id, 'visibility', 'none');
+  
+          // 6. Hide symbols/labels
+          if (layer.type === 'symbol') {
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
+          }
         });
       }
     } catch (err) {
