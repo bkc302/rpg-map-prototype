@@ -1498,7 +1498,7 @@
 
   function cancelAnyActiveCollection() {
       if (collectionInterval) {
-          clearInterval(collectionInterval);
+          clearTimeout(collectionInterval);
           collectionInterval = null;
       }
   
@@ -1512,48 +1512,60 @@
   }
 
   function startItemCollectionCountdown(node) {
-    stopLiveDistanceUpdates();
-    cancelAnyActiveCollection();
-
-    const container = document.getElementById('plot-info');
-    const progressBox = document.getElementById('collection-progress');
-    const progressBar = document.getElementById('collection-progress-bar');
-
-    let secondsLeft = 5;
-
-    progressBox.style.display = 'block';
-    progressBar.style.width = '100%';
-
-    container.innerHTML = `
-      <b>Collecting ${node.def.name}...</b><br/>
-      <small>Stay within range for 5 seconds!</small>
-    `;
-
-    const sfx = chopSound.cloneNode();
-    sfx.play().catch(() => {});
-
-    collectionInterval = setInterval(() => {
-        secondsLeft--;
-
-        const percent = (secondsLeft / 5) * 100;
-        progressBar.style.width = percent + '%';
-
-        const sfx = chopSound.cloneNode();
-        sfx.play().catch(() => {});
-
-        if (secondsLeft <= 0) {
-            finishItemCollection(node);
-        }
-    }, 1000);
-
-    collectionCancelCheck = setInterval(() => {
-        if (!userLat || !userLng) return;
-        const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
-        
-        if (dist > ITEM_COLLECTION_RADIUS_FEET) {
-            cancelItemCollection();
-        }
-    }, 300);
+      stopLiveDistanceUpdates();
+      cancelAnyActiveCollection();
+  
+      const container = document.getElementById('plot-info');
+      const progressBox = document.getElementById('collection-progress');
+      const progressBar = document.getElementById('collection-progress-bar');
+  
+      progressBox.style.display = 'block';
+      progressBar.style.width = '100%';
+  
+      container.innerHTML = `
+        <b>Collecting ${node.def.name}...</b><br/>
+        <small>Stay within range for 5 seconds!</small>
+      `;
+  
+      const startTime = performance.now();
+  
+      const playChopSound = () => {
+          const sfx = chopSound.cloneNode();
+          sfx.currentTime = 0;
+          sfx.play().catch(() => {});
+      };
+  
+      // Exactly 5 chops: at 0s, 1s, 2s, 3s, and 4s.
+      for (let i = 0; i < 5; i++) {
+          setTimeout(() => {
+              // Don't play if collection was cancelled.
+              if (!collectionInterval) return;
+  
+              playChopSound();
+          }, Math.max(0, (startTime + i * 1000) - performance.now()));
+      }
+  
+      // Finish exactly 5 seconds after starting.
+      collectionInterval = setTimeout(() => {
+          collectionInterval = null;
+          progressBar.style.width = '0%';
+          finishItemCollection(node);
+      }, 5000);
+  
+      collectionCancelCheck = setInterval(() => {
+          if (!userLat || !userLng) return;
+  
+          const dist = getDistanceFeet(
+              userLat,
+              userLng,
+              node.lat,
+              node.lng
+          );
+  
+          if (dist > ITEM_COLLECTION_RADIUS_FEET) {
+              cancelItemCollection();
+          }
+      }, 300);
   }
   
   function cancelItemCollection() {
