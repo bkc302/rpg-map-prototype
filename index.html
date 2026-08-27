@@ -858,6 +858,12 @@
   const savedInventory = JSON.parse(localStorage.getItem('rpg_player_inventory') || '[]');
   const playerInventory = new Set(savedInventory);
   
+  const savedBuildings = JSON.parse(
+    localStorage.getItem('rpg_buildings') || '{}'
+  );
+  
+  const plotBuildings = savedBuildings;  
+  
   let questState = {};
   
   try {
@@ -1051,6 +1057,21 @@
       respawnMs: 5 * 60 * 1000,
     
       yieldWeights: [1, 1, 1, 2, 2, 2, 3]
+    }
+  };
+  
+  const BUILDING_DEFS = {
+    workbench: {
+      id: 'workbench',
+      name: 'Workbench',
+      image: 'workbench.png',
+      width: 52,
+      height: 52,
+  
+      costs: {
+        Wood: 10,
+        Stone: 5
+      }
     }
   };
 
@@ -1342,6 +1363,19 @@
   
               renderItemCard(node);
           });
+      }
+	  
+      // Restore buildings on owned plots.
+      for (const plotId of claimedPlotIds) {
+        const buildingId = plotBuildings[plotId];
+      
+        if (!buildingId) continue;
+      
+        const def = BUILDING_DEFS[buildingId];
+      
+        if (!def) continue;
+      
+        spawnBuildingOnPlot(plotId, def);
       }
   
       updateItemVisibility();
@@ -2342,40 +2376,263 @@ function updateInventoryDisplay() {
 
   function renderSelectedPlotCard() {
     const container = document.getElementById('plot-info');
+  
     if (!selectedPlotId) {
       container.innerHTML = `<i>Tap any square, coin, or NPC to inspect.</i>`;
       return;
     }
-
+  
     if (claimedPlotIds.has(selectedPlotId)) {
-      container.innerHTML = `
-        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span><br/>
-        <button id="build-plot-btn" class="btn buy-btn">
-          🛠️ Build
-        </button>
-      `;
-	  document.getElementById('build-plot-btn').addEventListener('click', buildOnSelectedPlot);
+  
+      const buildingId = plotBuildings[selectedPlotId];
+  
+      if (buildingId && BUILDING_DEFS[buildingId]) {
+        const building = BUILDING_DEFS[buildingId];
+  
+        container.innerHTML = `
+          <b>Status:</b>
+          <span class="badge claimed">Claimed (Owned)</span><br/>
+          <b>Building:</b> 🛠️ ${building.name}
+        `;
+  
+      } else {
+        container.innerHTML = `
+          <b>Status:</b>
+          <span class="badge claimed">Claimed (Owned)</span><br/>
+          <button id="build-plot-btn" class="btn buy-btn">
+            🛠️ Build
+          </button>
+        `;
+  
+        document
+          .getElementById('build-plot-btn')
+          .addEventListener('click', buildOnSelectedPlot);
+      }
+  
     } else {
+  
       const canAfford = playerGold >= PLOT_PRICE;
-      const buttonText = canAfford ? `🛒 Buy Plot (${PLOT_PRICE} Gold)` : `❌ Need ${PLOT_PRICE} Gold`;
+      const buttonText = canAfford
+        ? `🛒 Buy Plot (${PLOT_PRICE} Gold)`
+        : `❌ Need ${PLOT_PRICE} Gold`;
+  
       const disabledAttr = canAfford ? '' : 'disabled';
-
+  
       container.innerHTML = `
         <b>Price:</b> 💰 ${PLOT_PRICE} Gold<br/>
         <b>Status:</b> <span class="badge wild">Wilderness</span><br/>
-        <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>${buttonText}</button>
+        <button id="buy-plot-btn" class="btn buy-btn" ${disabledAttr}>
+          ${buttonText}
+        </button>
       `;
-
+  
       if (canAfford) {
-        document.getElementById('buy-plot-btn').addEventListener('click', buySelectedPlot);
+        document
+          .getElementById('buy-plot-btn')
+          .addEventListener('click', buySelectedPlot);
       }
     }
   }
   
   function buildOnSelectedPlot() {
     if (!selectedPlotId) return;
+    if (!claimedPlotIds.has(selectedPlotId)) return;
   
-    // Building system will go here later.
+    const container = document.getElementById('plot-info');
+    const existingBuilding = plotBuildings[selectedPlotId];
+  
+    if (existingBuilding) {
+      container.innerHTML = `
+        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span><br/>
+        <b>Building:</b> 🛠️ ${BUILDING_DEFS[existingBuilding]?.name || 'Unknown'}<br/>
+        <small>This plot already has a building.</small>
+      `;
+      return;
+    }
+  
+    const def = BUILDING_DEFS.workbench;
+  
+    const woodAmount = parseInt(
+      localStorage.getItem('rpg_resource_Wood') || '0',
+      10
+    );
+  
+    const stoneAmount = parseInt(
+      localStorage.getItem('rpg_resource_Stone') || '0',
+      10
+    );
+  
+    const canAfford =
+      woodAmount >= def.costs.Wood &&
+      stoneAmount >= def.costs.Stone;
+  
+    container.innerHTML = `
+      <b>Build on Plot</b><br/><br/>
+  
+      <div style="
+        display:flex;
+        align-items:center;
+        gap:10px;
+        margin-bottom:10px;
+      ">
+        <img
+          src="${def.image}"
+          width="${def.width}"
+          height="${def.height}"
+          style="image-rendering: pixelated;"
+        />
+  
+        <div>
+          <b>${def.name}</b><br/>
+          <small>Crafting station</small>
+        </div>
+      </div>
+  
+      <b>Requires:</b><br/>
+      🪵 ${def.costs.Wood} Wood<br/>
+      🪨 ${def.costs.Stone} Stone<br/><br/>
+  
+      <button
+        id="build-workbench-btn"
+        class="btn buy-btn"
+        ${canAfford ? '' : 'disabled'}
+      >
+        ${canAfford
+          ? '🛠️ Build Workbench'
+          : '❌ Not Enough Resources'}
+      </button>
+  
+      <button
+        id="back-to-plot-btn"
+        class="btn"
+        style="margin-top:6px; background:#475569;"
+      >
+        ← Back
+      </button>
+    `;
+  
+    document
+      .getElementById('back-to-plot-btn')
+      .addEventListener('click', renderSelectedPlotCard);
+  
+    if (canAfford) {
+      document
+        .getElementById('build-workbench-btn')
+        .addEventListener('click', () => {
+          buildWorkbenchOnSelectedPlot();
+        });
+    }
+  }
+  
+  function buildWorkbenchOnSelectedPlot() {
+    if (!selectedPlotId) return;
+    if (!claimedPlotIds.has(selectedPlotId)) return;
+  
+    // Only one building per plot for now.
+    if (plotBuildings[selectedPlotId]) return;
+  
+    const def = BUILDING_DEFS.workbench;
+  
+    const woodAmount = parseInt(
+      localStorage.getItem('rpg_resource_Wood') || '0',
+      10
+    );
+  
+    const stoneAmount = parseInt(
+      localStorage.getItem('rpg_resource_Stone') || '0',
+      10
+    );
+  
+    if (
+      woodAmount < def.costs.Wood ||
+      stoneAmount < def.costs.Stone
+    ) {
+      return;
+    }
+  
+    // Pay the building cost.
+    localStorage.setItem(
+      'rpg_resource_Wood',
+      woodAmount - def.costs.Wood
+    );
+  
+    localStorage.setItem(
+      'rpg_resource_Stone',
+      stoneAmount - def.costs.Stone
+    );
+  
+    // Save the building to this plot.
+    plotBuildings[selectedPlotId] = def.id;
+  
+    localStorage.setItem(
+      'rpg_buildings',
+      JSON.stringify(plotBuildings)
+    );
+  
+    // Update inventory immediately.
+    updateInventoryDisplay();
+  
+    // Put the workbench on the map.
+    spawnBuildingOnPlot(selectedPlotId, def);
+  
+    // Show the updated plot card.
+    renderSelectedPlotCard();
+  }
+  
+  function spawnBuildingOnPlot(plotId, def) {
+    // Don't create duplicates.
+    const existing = document.querySelector(
+      `[data-building-plot="${plotId}"]`
+    );
+  
+    if (existing) {
+      existing.remove();
+    }
+  
+    // plot_123_456
+    const parts = plotId.split('_');
+  
+    if (parts.length !== 3) return;
+  
+    const gridY = Number(parts[1]);
+    const gridX = Number(parts[2]);
+  
+    if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return;
+  
+    // Exact center of the plot.
+    const buildingLat =
+      (gridY + 0.50) * LAT_GRID_SIZE_DEG;
+  
+    const buildingLng =
+      (gridX + 0.50) * LNG_GRID_SIZE_DEG;
+  
+    const container = document.createElement('div');
+  
+    container.className = 'building-marker-container';
+    container.dataset.buildingPlot = plotId;
+  
+    container.style.width = `${def.width}px`;
+    container.style.height = `${def.height}px`;
+    container.style.pointerEvents = 'none';
+  
+    const img = document.createElement('img');
+  
+    img.src = def.image;
+    img.width = def.width;
+    img.height = def.height;
+  
+    img.style.width = `${def.width}px`;
+    img.style.height = `${def.height}px`;
+    img.style.imageRendering = 'pixelated';
+  
+    container.appendChild(img);
+  
+    new maplibregl.Marker({
+      element: container,
+      anchor: 'center'
+    })
+      .setLngLat([buildingLng, buildingLat])
+      .addTo(map);
   }
 
   function buySelectedPlot() {
@@ -2447,11 +2704,12 @@ function updateInventoryDisplay() {
 
   // UI & GEOLOCATION EVENT LISTENERS
   document.getElementById('dev-reset-btn').addEventListener('click', () => {
-      if (confirm("Reset all gold, inventory, wood, and wipe owned plots?")) {
+      if (confirm("Reset all gold, inventory, resources, buildings, and wipe owned plots?")) {
   
           localStorage.removeItem('rpg_player_gold');
           localStorage.removeItem('rpg_claimed_plots');
           localStorage.removeItem('rpg_player_inventory');
+		  localStorage.removeItem('rpg_buildings');
           
           localStorage.removeItem("rpg_quest_state");
           questState = {};
@@ -2460,6 +2718,10 @@ function updateInventoryDisplay() {
           claimedPlotIds.clear();
           playerInventory.clear();
           selectedPlotId = null;
+		  
+          for (const plotId in plotBuildings) {
+            delete plotBuildings[plotId];
+          }
           
           for (const key of Object.keys(localStorage)) {
               if (
