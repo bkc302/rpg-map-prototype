@@ -1529,6 +1529,7 @@
   
   let collectionInterval = null;
   let collectionCancelCheck = null;
+  let collectionProgressInterval = null;
 
   function cancelAnyActiveCollection() {
       if (collectionInterval) {
@@ -1541,8 +1542,16 @@
           collectionCancelCheck = null;
       }
   
+      if (collectionProgressInterval) {
+          clearInterval(collectionProgressInterval);
+          collectionProgressInterval = null;
+      }
+  
       const progressBox = document.getElementById('collection-progress');
-      if (progressBox) progressBox.style.display = 'none';
+  
+      if (progressBox) {
+          progressBox.style.display = 'none';
+      }
   }
 
   function startItemCollectionCountdown(node) {
@@ -1569,20 +1578,40 @@
           sfx.play().catch(() => {});
       };
   
-      // Exactly 5 chops: at 0s, 1s, 2s, 3s, and 4s.
+      // Exactly 5 chops: 0s, 1s, 2s, 3s, and 4s.
       for (let i = 0; i < 5; i++) {
           setTimeout(() => {
               // Don't play if collection was cancelled.
               if (!collectionInterval) return;
   
               playChopSound();
-          }, Math.max(0, (startTime + i * 1000) - performance.now()));
+          }, i * 1000);
       }
+  
+      // Progress bar animation.
+      collectionProgressInterval = setInterval(() => {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / 5000, 1);
+  
+          progressBar.style.width = `${(1 - progress) * 100}%`;
+  
+          if (progress >= 1) {
+              clearInterval(collectionProgressInterval);
+              collectionProgressInterval = null;
+          }
+      }, 50);
   
       // Finish exactly 5 seconds after starting.
       collectionInterval = setTimeout(() => {
           collectionInterval = null;
+  
+          if (collectionProgressInterval) {
+              clearInterval(collectionProgressInterval);
+              collectionProgressInterval = null;
+          }
+  
           progressBar.style.width = '0%';
+  
           finishItemCollection(node);
       }, 5000);
   
