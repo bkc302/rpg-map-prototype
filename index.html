@@ -449,8 +449,13 @@
     .autocenter-off:active { background-color: #334155; }
 
     .badge {
-      display: inline-block; padding: 3px 10px; font-size: 12px;
-      border-radius: 6px; font-weight: bold; margin-top: 4px;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      font-size: 12px;
+      line-height: 1;
+      border-radius: 3px;
+      margin-top: 0;            
     }
     .claimed { background-color: #2563eb; color: #fff; }
     .wild { background-color: #10b981; color: #fff; }
@@ -1738,7 +1743,7 @@
           
           if (def.tradeType === "Wood") {
               const woodAmount = parseInt(
-                  localStorage.getItem('rpg_resource_wood') || '0',
+                  localStorage.getItem('rpg_resource_Wood') || '0',
                   10
               );
           
@@ -1773,7 +1778,7 @@
       }
   
       if (def.tradeType === "Wood") {
-          const storageKey = 'rpg_resource_wood';
+          const storageKey = 'rpg_resource_Wood';
       
           const woodAmount = parseInt(
               localStorage.getItem(storageKey) || '0',
@@ -2301,7 +2306,7 @@ function updateInventoryDisplay() {
     }
 
     const woodAmount = parseInt(
-        localStorage.getItem('rpg_resource_wood') || '0',
+        localStorage.getItem('rpg_resource_Wood') || '0',
         10
     );
 
@@ -2310,7 +2315,7 @@ function updateInventoryDisplay() {
     }
 
     const stoneAmount = parseInt(
-        localStorage.getItem('rpg_resource_stone') || '0',
+        localStorage.getItem('rpg_resource_Stone') || '0',
         10
     );
 
@@ -2716,7 +2721,7 @@ function updateInventoryDisplay() {
       type: 'line',
       source: 'square-plots',
       filter: ['get', 'isSelected'],
-      paint: { 'line-color': '#ef4444', 'line-width': 4, 'line-opacity': 1.0 }
+      paint: { 'line-color': '#ef4444', 'line-width': 2, 'line-opacity': 0.8 }
     });
 
     map.addLayer({
@@ -2724,7 +2729,7 @@ function updateInventoryDisplay() {
       type: 'line',
       source: 'square-plots',
       filter: ['get', 'isClaimed'],
-      paint: { 'line-color': '#eab308', 'line-width': 4, 'line-opacity': 1.0 }
+      paint: { 'line-color': '#eab308', 'line-width': 2, 'line-opacity': 0.8 }
     });
 
     map.on('zoom', updateItemVisibility);
