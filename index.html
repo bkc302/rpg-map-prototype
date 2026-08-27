@@ -899,7 +899,7 @@
           offsetX: 0.75,
           offsetY: 0.25,
           tradeItem: "mining pick",
-          tradeType: "wood",
+          tradeType: "Wood",
           price: 20,
 		  
 		  tradeText: "I'm running short on good handles. Bring me some wood and I'll make you a mining pick.",
@@ -1003,7 +1003,7 @@
     tree: {
       id: 'tree',
       name: 'Tree',
-      resourceName: 'wood',
+      resourceName: 'Wood',
   
       mainImage: 'tree.png',
       collectedImage: 'cut_tree.png',
@@ -1027,7 +1027,7 @@
     stone: {
       id: 'stone',
       name: 'Stone',
-      resourceName: 'stone',
+      resourceName: 'Stone',
     
       mainImage: 'stone.png',
       collectedImage: '',
@@ -1155,6 +1155,19 @@
     activeItemNodes.forEach(node => node.marker.remove());
     activeItemNodes = [];
   }
+  
+  function removeItemsFromClaimedPlots() {
+    for (let i = activeItemNodes.length - 1; i >= 0; i--) {
+      const node = activeItemNodes[i];
+  
+      const plotId = `plot_${node.tileKey}`;
+  
+      if (claimedPlotIds.has(plotId)) {
+        node.marker.remove();
+        activeItemNodes.splice(i, 1);
+      }
+    }
+  }
 
   function getTileRandom(gridX, gridY) {
     let hash = Math.sin(gridX * 12.9898 + gridY * 78.233) * 43758.5453123;
@@ -1219,7 +1232,13 @@
       for (const cell of candidateCells) {
   
           const tileKey = `${cell.gridY}_${cell.gridX}`;
-  
+          
+          // Owned plots are reserved for the player's buildings.
+          // No trees, stones, or other natural resources can spawn here.
+          const plotId = `plot_${tileKey}`;
+          
+          if (claimedPlotIds.has(plotId)) continue;
+          
           // Determine which resource, if any, belongs on this tile.
           let selectedDef = null;
   
@@ -1417,10 +1436,10 @@
       updateInventoryDisplay();
   
       // Trigger the item popup above the player's head
-      showItemPopup(yieldAmount, def.name);
-  
+      showItemPopup(yieldAmount, def.resourceName);
+      
       document.getElementById('status').innerText =
-          `Collected +${yieldAmount} ${def.name}!`;
+          `Collected +${yieldAmount} ${def.resourceName}!`;
   
       stopLiveDistanceUpdates();
   
@@ -1717,7 +1736,7 @@
               requirementLabel = `${def.price} Gold`;
           }
           
-          if (def.tradeType === "wood") {
+          if (def.tradeType === "Wood") {
               const woodAmount = parseInt(
                   localStorage.getItem('rpg_resource_wood') || '0',
                   10
@@ -1753,7 +1772,7 @@
           playerGold -= def.price;
       }
   
-      if (def.tradeType === "wood") {
+      if (def.tradeType === "Wood") {
           const storageKey = 'rpg_resource_wood';
       
           const woodAmount = parseInt(
@@ -2313,8 +2332,12 @@ function updateInventoryDisplay() {
 
     if (claimedPlotIds.has(selectedPlotId)) {
       container.innerHTML = `
-        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span>
+        <b>Status:</b> <span class="badge claimed">Claimed (Owned)</span><br/>
+        <button id="build-plot-btn" class="btn buy-btn">
+          🛠️ Build
+        </button>
       `;
+	  document.getElementById('build-plot-btn').addEventListener('click', buildOnSelectedPlot);
     } else {
       const canAfford = playerGold >= PLOT_PRICE;
       const buttonText = canAfford ? `🛒 Buy Plot (${PLOT_PRICE} Gold)` : `❌ Need ${PLOT_PRICE} Gold`;
@@ -2331,18 +2354,32 @@ function updateInventoryDisplay() {
       }
     }
   }
+  
+  function buildOnSelectedPlot() {
+    if (!selectedPlotId) return;
+  
+    // Building system will go here later.
+  }
 
   function buySelectedPlot() {
     if (!selectedPlotId || claimedPlotIds.has(selectedPlotId)) return;
+  
     if (playerGold >= PLOT_PRICE) {
       playerGold -= PLOT_PRICE;
       claimedPlotIds.add(selectedPlotId);
-      
+  
       localStorage.setItem('rpg_player_gold', playerGold);
-      localStorage.setItem('rpg_claimed_plots', JSON.stringify(Array.from(claimedPlotIds)));
+      localStorage.setItem(
+        'rpg_claimed_plots',
+        JSON.stringify(Array.from(claimedPlotIds))
+      );
+  
+      // Now that the plot is officially saved as owned,
+      // remove any resources currently occupying it.
+      removeItemsFromClaimedPlots();
   
       updateGoldDisplay();
-	  closeBackpackIfOpen(false);
+      closeBackpackIfOpen(false);
       ensureUIPanelVisible();
       renderSelectedPlotCard();
       refreshMapGrid();
