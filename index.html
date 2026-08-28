@@ -930,6 +930,7 @@
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.80,
+		  disabledKey: "rpg_npc_disabled_bramble",
   
           quests: [
               {
@@ -2088,6 +2089,12 @@
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
                   node.indicatorMarker?.remove();
+				  
+                  // Permanently remove this NPC until the game is reset.
+                  if (def.disabledKey) {
+                      localStorage.setItem(def.disabledKey, "true");
+                  }				  
+				  
                   npcNodes[def.id] = null;
               } else {
                   updateQuestIndicator(def);
@@ -2783,12 +2790,19 @@ function updateInventoryDisplay() {
           // Reset & respawn quest NPCs
           for (const key in QUEST_NPC_DEFS) {
               const def = QUEST_NPC_DEFS[key];
+          
+              if (def.disabledKey) {
+                  localStorage.removeItem(def.disabledKey);
+              }
+          
               if (npcNodes[def.id]?.marker) {
                   npcNodes[def.id].marker.remove();
               }
+          
               if (npcNodes[def.id]?.indicatorMarker) {
                   npcNodes[def.id].indicatorMarker.remove();
               }
+          
               npcNodes[def.id] = null;
           }
   
