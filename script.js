@@ -12,8 +12,17 @@
   let playerGold = (savedGold !== null) ? parseInt(savedGold, 10) || 0 : 0;
   
   const PLOT_PRICE = 100;
-  const MIN_START_ACCURACY_FEET = 30;
-  const ITEM_COLLECTION_RADIUS_FEET = 150;
+  const MIN_START_ACCURACY_FEET = 30; 
+  const INTERACTION_RADIUS_FEET = 150;
+  
+  function getResource(name) {
+    return parseInt(localStorage.getItem(`rpg_resource_${name}`) || '0', 10);
+  }
+  function addResource(name, amount) {
+    const newAmount = getResource(name) + amount;
+    localStorage.setItem(`rpg_resource_${name}`, newAmount);
+    return newAmount;
+  }
   
   const savedPlots = JSON.parse(localStorage.getItem('rpg_claimed_plots') || '[]');
   const claimedPlotIds = new Set(savedPlots);
@@ -41,7 +50,6 @@
   // Gold Spawning & Gathering System
   let activeGoldNodes = [];
   const MAX_GOLD_NODES = 30;
-  const PICKUP_RADIUS_FEET = 150;
   const MAX_DESPAWN_DISTANCE_FEET = 800;
    
   const NPC_DEFS = {
@@ -49,7 +57,7 @@
           id: "timberPete",
           name: "Timber Pete",
           img: "pete.png",
-          talkRadius: 150,
+          talkRadius: INTERACTION_RADIUS_FEET,
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.25,
@@ -68,7 +76,7 @@
           id: "minerGus",
           name: "Miner Gus",
           img: "gus.png",
-          talkRadius: 150,
+          talkRadius: INTERACTION_RADIUS_FEET,
           spawnRadius: 1,
           offsetX: 0.75,
           offsetY: 0.25,
@@ -89,7 +97,7 @@
           id: "rangerBramble",
           name: "Ranger Bramblefoot",
           img: "bramblefoot.png",
-          talkRadius: 150,
+          talkRadius: INTERACTION_RADIUS_FEET,
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.80,
@@ -132,7 +140,7 @@
           id: "beginnerQuestGrubwick",
           name: "Grubwick",
           img: "grubwick.png",
-          talkRadius: 150,
+          talkRadius: INTERACTION_RADIUS_FEET,
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.80,
@@ -389,6 +397,7 @@
   function spawnItems() {
       if (!userLat || !userLng) return;
       if (collectionInterval) return;
+	  if (activeTarget && activeTarget.type === 'item') return;
   
       const { gridX: centerGridX, gridY: centerGridY } =
           latLngToGrid(userLat, userLng);
@@ -552,7 +561,7 @@
   
     startLiveDistanceUpdates("item", node, dist => {
       const distNum = Number(dist);
-      const inRange = distNum <= ITEM_COLLECTION_RADIUS_FEET;
+      const inRange = distNum <= INTERACTION_RADIUS_FEET;
       const hasTool = playerInventory.has(def.requiredTool);
   
       if (!hasTool) {
@@ -571,7 +580,7 @@
           <b>${def.name}:</b><br/>
           <b>Distance:</b> ${dist} ft away<br/>
           <small style="color:#f7f7f7;">
-            Walk within 150 ft to collect!
+            Walk within ${INTERACTION_RADIUS_FEET} ft to collect!
           </small>
         `;
         return;
@@ -617,16 +626,7 @@
       const yieldAmount =
           yieldWeights[Math.floor(Math.random() * yieldWeights.length)];
   
-      const storageKey = `rpg_resource_${def.resourceName}`;
-  
-      const savedAmount = parseInt(
-          localStorage.getItem(storageKey) || '0',
-          10
-      );
-  
-      const newAmount = savedAmount + yieldAmount;
-  
-      localStorage.setItem(storageKey, newAmount);
+      addResource(def.resourceName, yieldAmount);
   
       // Force the collected visual state.
       if (def.collectedImage) {
@@ -789,7 +789,7 @@
               node.lng
           );
   
-          if (dist > ITEM_COLLECTION_RADIUS_FEET) {
+          if (dist > INTERACTION_RADIUS_FEET) {
               cancelItemCollection();
           }
       }, 300);
@@ -981,12 +981,7 @@
           }
           
           if (def.tradeType === "Wood") {
-              const woodAmount = parseInt(
-                  localStorage.getItem('rpg_resource_Wood') || '0',
-                  10
-              );
-          
-              canAfford = woodAmount >= def.price;
+              canAfford = getResource('Wood') >= def.price;
               requirementLabel = `${def.price} Wood`;
           }
   
@@ -1017,19 +1012,8 @@
       }
   
       if (def.tradeType === "Wood") {
-          const storageKey = 'rpg_resource_Wood';
-      
-          const woodAmount = parseInt(
-              localStorage.getItem(storageKey) || '0',
-              10
-          );
-      
-          if (woodAmount < def.price) return;
-      
-          localStorage.setItem(
-              storageKey,
-              woodAmount - def.price
-          );
+          if (getResource('Wood') < def.price) return;
+          addResource('Wood', -def.price);
       }
   
       playerInventory.add(def.tradeItem);
@@ -1437,7 +1421,7 @@
       
           const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
       
-          if (dist <= 150) {
+          if (dist <= INTERACTION_RADIUS_FEET) {
               collectCoin(goldNode);
               return;
           }
@@ -1450,7 +1434,7 @@
               const distNow = Number(distRounded);
               const valueLabel = coinValue === 5 ? '🌟 RARE GOLD CACHE' : '🪙 Gold Coin';
       
-              if (distNow <= 150) {
+              if (distNow <= INTERACTION_RADIUS_FEET) {
                   collectCoin(goldNode);
                   stopLiveDistanceUpdates();
                   return;
@@ -1459,7 +1443,7 @@
               container.innerHTML = `
                   <b>${valueLabel}:</b> +${coinValue} Gold<br/>
                   <b>Distance:</b> ${distRounded} ft away<br/>
-                  <small style="color:#f7f7f7;">Walk within 150 ft to pick up!</small>
+                  <small style="color:#f7f7f7;">Walk within ${INTERACTION_RADIUS_FEET} ft to pick up!</small>
               `;
           });
       });
@@ -1483,7 +1467,7 @@
   
           const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
   
-          if (dist <= PICKUP_RADIUS_FEET) {
+          if (dist <= INTERACTION_RADIUS_FEET) {
               collectCoin(node);
           }
       }
@@ -1550,19 +1534,13 @@
           items.push('⛏️ Mining Pick');
       }
   
-      const woodAmount = parseInt(
-          localStorage.getItem('rpg_resource_Wood') || '0',
-          10
-      );
+      const woodAmount = getResource('Wood');
   
       if (woodAmount > 0) {
           items.push(`🪵 Wood x${woodAmount}`);
       }
   
-      const stoneAmount = parseInt(
-          localStorage.getItem('rpg_resource_Stone') || '0',
-          10
-      );
+      const stoneAmount = getResource('Stone');
   
       if (stoneAmount > 0) {
           items.push(`🪨 Stone x${stoneAmount}`);
@@ -1651,15 +1629,8 @@
   
     const def = BUILDING_DEFS.workbench;
   
-    const woodAmount = parseInt(
-      localStorage.getItem('rpg_resource_Wood') || '0',
-      10
-    );
-  
-    const stoneAmount = parseInt(
-      localStorage.getItem('rpg_resource_Stone') || '0',
-      10
-    );
+    const woodAmount = getResource('Wood');
+    const stoneAmount = getResource('Stone');
   
     const canAfford =
       woodAmount >= def.costs.Wood &&
@@ -1732,33 +1703,13 @@
   
     const def = BUILDING_DEFS.workbench;
   
-    const woodAmount = parseInt(
-      localStorage.getItem('rpg_resource_Wood') || '0',
-      10
-    );
-  
-    const stoneAmount = parseInt(
-      localStorage.getItem('rpg_resource_Stone') || '0',
-      10
-    );
-  
-    if (
-      woodAmount < def.costs.Wood ||
-      stoneAmount < def.costs.Stone
-    ) {
+    if (getResource('Wood') < def.costs.Wood || getResource('Stone') < def.costs.Stone) {
       return;
     }
-  
+    
     // Pay the building cost.
-    localStorage.setItem(
-      'rpg_resource_Wood',
-      woodAmount - def.costs.Wood
-    );
-  
-    localStorage.setItem(
-      'rpg_resource_Stone',
-      stoneAmount - def.costs.Stone
-    );
+    addResource('Wood', -def.costs.Wood);
+    addResource('Stone', -def.costs.Stone);
   
     // Save the building to this plot.
     plotBuildings[selectedPlotId] = def.id;
