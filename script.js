@@ -101,8 +101,7 @@
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.80,
-		  disabledKey: "rpg_npc_disabled_bramble",
-  
+          disabledKey: "rpg_npc_disabled_bramble",
           quests: [
               {
                   questId: "bramble_intro_quest",
@@ -110,7 +109,6 @@
                   rewardGold: 20,
                   rewardItems: [],
                   disappearOnComplete: false,
-  
                   dialog: {
                       offer: "To begin your journey, you’ll need to earn some gold. Walk around and gather at least 20 gold, then visit Timber Pete to buy yourself an axe. Will you take on this task?",
                       inProgress: "You're making progress. Gather enough gold and buy an axe from Timber Pete.",
@@ -118,14 +116,12 @@
                       completed: "Here's 20 gold for your effort. You're ready for the next step."
                   }
               },
-  
               {
                   questId: "bramble_second_quest",
                   requiredItems: ["mining pick"],
                   rewardGold: 30,
                   rewardItems: [],
                   disappearOnComplete: true,
-  
                   dialog: {
                       offer: "Now that you have that shiny new axe, go cut down some trees and gather wood. Miner Gus will trade you a mining pick for 20 wood. Will you take on this task?",
                       inProgress: "Keep chopping! You’ll need enough wood to trade with Miner Gus.",
@@ -135,7 +131,6 @@
               }
           ]
       },
-	  
       beginnerQuestGrubwick: {
           id: "beginnerQuestGrubwick",
           name: "Grubwick",
@@ -144,9 +139,8 @@
           spawnRadius: 1,
           offsetX: 0.25,
           offsetY: 0.80,
-      
+          disabledKey: "rpg_npc_disabled_grubwick",
           appearsAfterQuest: "bramble_second_quest",
-      
           quests: [
               {
                   questId: "grubwick_crafting_quest",
@@ -154,14 +148,10 @@
                   rewardGold: 50,
                   rewardItems: [],
                   disappearOnComplete: false,
-      
                   dialog: {
-                      offer: "Ah! There you are, adventurer! I have a little challenge for you. First, buy yourself a plot of land and build a crafting station. Pick somewhere you visit often—you'll be using that station plenty! Once you've got it built, gather what you need and craft yourself a wooden sword. Think you can manage that?",
-                      
-                      inProgress: "Still working on that crafting station and wooden sword? Remember, it's best to build your station somewhere you visit often. You'll be using it again and again!",
-                      
+                      offer: "Ah! There you are, adventurer! I have another challenge for you. First, buy yourself a plot of land and build a workbench. Pick somewhere you visit often—you'll be using that workbench plenty! Once you've got it built, gather what you need and craft yourself a wooden sword. Think you can manage that?",
+                      inProgress: "Still working on that workbench and wooden sword? Make sure to place that workbench somewhere handy—it's going to be your main hub for crafting.",
                       readyToTurnIn: "Ha! Now that's a proper adventurer's weapon! A wooden sword isn't much to look at, but every great warrior has to start somewhere.",
-                      
                       completed: "Excellent work! You've got yourself a place to craft and a sword to match. Here's 50 gold for your trouble. Keep that sword close—you never know what might be lurking out there!"
                   }
               }
