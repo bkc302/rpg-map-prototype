@@ -1764,6 +1764,8 @@
     img.style.width = `${def.width}px`;
     img.style.height = `${def.height}px`;
     img.style.imageRendering = 'pixelated';
+    img.style.imageRendering = 'crisp-edges';
+    img.style.filter = 'drop-shadow(0px 4px 6px rgba(0,0,0,0.4))';
   
     container.appendChild(img);
   
