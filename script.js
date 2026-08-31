@@ -219,7 +219,79 @@
       respawnMs: 5 * 60 * 1000,
     
       yieldWeights: [1, 1, 1, 2, 2, 2, 3]
-    }
+    },
+	
+    copper: {
+      id: 'copper',
+      name: 'Copper',
+      resourceName: 'Copper Ore',
+    
+      mainImage: 'copper_node.png',
+      collectedImage: '',
+      zoomImage: 'copper_node.png',
+    
+      requiredTool: 'mining pick',
+    
+      percentage: 15, //15 percent chance that a tile can be copper
+    
+      normalWidth: 48,
+      normalHeight: 48,
+      zoomWidth: 48,
+      zoomHeight: 48,
+      zoomThreshold: 17.75,
+    
+      respawnMs: 5 * 60 * 1000,
+    
+      yieldWeights: [1, 1, 1, 2, 2, 2, 3]
+    },
+	
+    tin: {
+      id: 'tin',
+      name: 'Tin',
+      resourceName: 'Tin Ore',
+    
+      mainImage: 'tin_node.png',
+      collectedImage: '',
+      zoomImage: 'tin_node.png',
+    
+      requiredTool: 'mining pick',
+    
+      percentage: 15, //15 percent chance that a tile can be tin
+    
+      normalWidth: 48,
+      normalHeight: 48,
+      zoomWidth: 48,
+      zoomHeight: 48,
+      zoomThreshold: 17.75,
+    
+      respawnMs: 5 * 60 * 1000,
+    
+      yieldWeights: [1, 1, 1, 2, 2, 2, 3]
+    },
+
+    iron: {
+      id: 'iron',
+      name: 'Iron',
+      resourceName: 'Iron Ore',
+    
+      mainImage: 'iron_node.png',
+      collectedImage: '',
+      zoomImage: 'iron_node.png',
+    
+      requiredTool: 'mining pick',
+    
+      percentage: 13, //13 percent chance that a tile can be iron
+    
+      normalWidth: 48,
+      normalHeight: 48,
+      zoomWidth: 48,
+      zoomHeight: 48,
+      zoomThreshold: 17.75,
+    
+      respawnMs: 5 * 60 * 1000,
+    
+      yieldWeights: [1, 1, 1, 2, 2, 2, 3]
+    }	
   };
   
   const BUILDING_DEFS = {
@@ -1516,28 +1588,29 @@
   function updateInventoryDisplay() {
       const items = [];
   
-      if (playerInventory.has('axe')) {
-          items.push('🪓 Axe');
-      }
+      // Tools
+      if (playerInventory.has('axe')) items.push('🪓 Axe');
+      if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
   
-      if (playerInventory.has('mining pick')) {
-          items.push('⛏️ Mining Pick');
-      }
+      // Emoji map for dynamic resources
+      const resourceEmojis = {
+          'Wood': '🪵',
+          'Stone': '🪨',
+          'Copper Ore': '🟠',
+          'Tin Ore': '⚪',
+          'Iron Ore': '🟤'
+      };
   
-      const woodAmount = getResource('Wood');
-  
-      if (woodAmount > 0) {
-          items.push(`🪵 Wood x${woodAmount}`);
-      }
-  
-      const stoneAmount = getResource('Stone');
-  
-      if (stoneAmount > 0) {
-          items.push(`🪨 Stone x${stoneAmount}`);
-      }
+      // Loop through definitions dynamically
+      Object.values(ITEM_DEFS).forEach(def => {
+          const amount = getResource(def.resourceName);
+          if (amount > 0) {
+              const emoji = resourceEmojis[def.resourceName] || '📦';
+              items.push(`${emoji} ${def.resourceName} x${amount}`);
+          }
+      });
   
       const listText = items.length > 0 ? items.join(', ') : 'Empty';
-  
       document.getElementById('inv-items-list').innerText = listText;
   }
 
