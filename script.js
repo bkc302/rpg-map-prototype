@@ -301,11 +301,15 @@
       image: 'workbench.png',
       width: 52,
       height: 52,
-  
-      costs: {
-        Wood: 10,
-        Stone: 5
-      }
+      costs: { Wood: 10, Stone: 5 }
+    },
+    forge: {
+      id: 'forge',
+      name: 'Forge',
+      image: 'forge.png',
+      width: 96,
+      height: 96,
+      costs: { Stone: 15, 'Iron Ore': 5 }
     }
   };
   
@@ -323,6 +327,52 @@
       costs: { Wood: 20 }
     }
   };
+  
+  const SMELTING_RECIPES = {
+    copperIngot: {
+      id: 'Copper Ingot',
+      name: 'Copper Ingot',
+      icon: '🟧',
+      type: 'resource',
+      craftedAt: 'forge',
+      costs: { 'Copper Ore': 2 },
+      yieldAmount: 1
+    },
+    tinIngot: {
+      id: 'Tin Ingot',
+      name: 'Tin Ingot',
+      icon: '⬜',
+      type: 'resource',
+      craftedAt: 'forge',
+      costs: { 'Tin Ore': 2 },
+      yieldAmount: 1
+    },
+    bronzeIngot: {
+      id: 'Bronze Ingot',
+      name: 'Bronze Ingot',
+      icon: '🟫',
+      type: 'resource',
+      craftedAt: 'forge',
+      costs: { 'Copper Ingot': 2, 'Tin Ingot': 2 },
+      yieldAmount: 1
+    },
+    ironIngot: {
+      id: 'Iron Ingot',
+      name: 'Iron Ingot',
+      icon: '⬛',
+      type: 'resource',
+      craftedAt: 'forge',
+      costs: { 'Iron Ore': 2 },
+      yieldAmount: 1
+    }
+  };
+
+  function getRecipesForBuilding(buildingId) {
+    return [
+      ...Object.values(GEAR_DEFS).filter(g => g.craftedAt === buildingId),
+      ...Object.values(SMELTING_RECIPES).filter(r => r.craftedAt === buildingId)
+    ];
+  }
   
   function getBestGearModifier(statType) {
     let best = 0;
@@ -1633,15 +1683,23 @@
           'Stone': '🪨',
           'Copper Ore': '🟠',
           'Tin Ore': '⚪',
-          'Iron Ore': '🟤'
+          'Iron Ore': '🟤',
+          'Copper Ingot': '🟧',
+          'Tin Ingot': '⬜',
+		  'Bronze Ingot': '🟫',
+          'Iron Ingot': '⬛'
       };
-  
-      // Loop through definitions dynamically
-      Object.values(ITEM_DEFS).forEach(def => {
-          const amount = getResource(def.resourceName);
+	  
+      const trackedResourceNames = [
+          ...Object.values(ITEM_DEFS).map(def => def.resourceName),
+          ...Object.values(SMELTING_RECIPES).map(r => r.id)
+      ];
+      
+      trackedResourceNames.forEach(name => {
+          const amount = getResource(name);
           if (amount > 0) {
-              const emoji = resourceEmojis[def.resourceName] || '📦';
-              items.push(`${emoji} ${def.resourceName} x${amount}`);
+              const emoji = resourceEmojis[name] || '📦';
+              items.push(`${emoji} ${name} x${amount}`);
           }
       });
   
@@ -1732,105 +1790,59 @@
       return;
     }
   
-    const def = BUILDING_DEFS.workbench;
+    let html = `<b>Build on Plot</b><br/><br/>`;
   
-    const woodAmount = getResource('Wood');
-    const stoneAmount = getResource('Stone');
+    Object.values(BUILDING_DEFS).forEach(def => {
+      const costEntries = Object.entries(def.costs);
+      const canAfford = costEntries.every(([res, amt]) => getResource(res) >= amt);
+      const costText = costEntries.map(([res, amt]) => `${amt} ${res}`).join(', ');
   
-    const canAfford =
-      woodAmount >= def.costs.Wood &&
-      stoneAmount >= def.costs.Stone;
-  
-    container.innerHTML = `
-      <b>Build on Plot</b><br/><br/>
-  
-      <div style="
-        display:flex;
-        align-items:center;
-        gap:10px;
-        margin-bottom:10px;
-      ">
-        <img
-          src="${def.image}"
-          width="${def.width}"
-          height="${def.height}"
-          style="image-rendering: pixelated;"
-        />
-  
-        <div>
-          <b>${def.name}</b><br/>
-          <small>Crafting station</small>
+      html += `
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+          <img src="${def.image}" width="${def.width}" height="${def.height}" style="image-rendering: pixelated;" />
+          <div style="flex:1;">
+            <b>${def.name}</b><br/>
+            <small>Requires: ${costText}</small><br/>
+            <button id="build-btn-${def.id}" class="btn buy-btn" style="margin-top:4px;" ${canAfford ? '' : 'disabled'}>
+              ${canAfford ? `🛠️ Build ${def.name}` : '❌ Not Enough Resources'}
+            </button>
+          </div>
         </div>
-      </div>
+      `;
+    });
   
-      <b>Requires:</b><br/>
-      🪵 ${def.costs.Wood} Wood<br/>
-      🪨 ${def.costs.Stone} Stone<br/><br/>
+    html += `<button id="back-to-plot-btn" class="btn" style="margin-top:6px; background:#475569;">← Back</button>`;
   
-      <button
-        id="build-workbench-btn"
-        class="btn buy-btn"
-        ${canAfford ? '' : 'disabled'}
-      >
-        ${canAfford
-          ? '🛠️ Build Workbench'
-          : '❌ Not Enough Resources'}
-      </button>
+    container.innerHTML = html;
   
-      <button
-        id="back-to-plot-btn"
-        class="btn"
-        style="margin-top:6px; background:#475569;"
-      >
-        ← Back
-      </button>
-    `;
+    document.getElementById('back-to-plot-btn').addEventListener('click', renderSelectedPlotCard);
   
-    document
-      .getElementById('back-to-plot-btn')
-      .addEventListener('click', renderSelectedPlotCard);
+    Object.values(BUILDING_DEFS).forEach(def => {
+      const costEntries = Object.entries(def.costs);
+      const canAfford = costEntries.every(([res, amt]) => getResource(res) >= amt);
+      if (!canAfford) return;
   
-    if (canAfford) {
-      document
-        .getElementById('build-workbench-btn')
-        .addEventListener('click', () => {
-          buildWorkbenchOnSelectedPlot();
-        });
-    }
+      document.getElementById(`build-btn-${def.id}`).addEventListener('click', () => {
+        buildOnPlot(def);
+      });
+    });
   }
   
-  function buildWorkbenchOnSelectedPlot() {
+  function buildOnPlot(def) {
     if (!selectedPlotId) return;
     if (!claimedPlotIds.has(selectedPlotId)) return;
-  
-    // Only one building per plot for now.
     if (plotBuildings[selectedPlotId]) return;
   
-    const def = BUILDING_DEFS.workbench;
+    const canAfford = Object.entries(def.costs).every(([res, amt]) => getResource(res) >= amt);
+    if (!canAfford) return;
   
-    if (getResource('Wood') < def.costs.Wood || getResource('Stone') < def.costs.Stone) {
-      return;
-    }
-    
-    // Pay the building cost.
-    addResource('Wood', -def.costs.Wood);
-    addResource('Stone', -def.costs.Stone);
+    Object.entries(def.costs).forEach(([res, amt]) => addResource(res, -amt));
   
-    // Save the building to this plot.
     plotBuildings[selectedPlotId] = def.id;
+    localStorage.setItem('rpg_buildings', JSON.stringify(plotBuildings));
   
-    localStorage.setItem(
-      'rpg_buildings',
-      JSON.stringify(plotBuildings)
-    );
-  
-    // Update inventory immediately.
     updateInventoryDisplay();
-  
-    // Put the workbench on the map.
     spawnBuildingOnPlot(selectedPlotId, def);
-  
-    // Show the updated plot card.
     renderSelectedPlotCard();
   }
   
@@ -1905,7 +1917,7 @@
         return;
       }
   
-      const recipes = Object.values(GEAR_DEFS).filter(g => g.craftedAt === buildingDef.id);
+      const recipes = getRecipesForBuilding(buildingDef.id);
   
       if (recipes.length === 0) {
         container.innerHTML = `
@@ -1918,11 +1930,12 @@
       let html = `<b>${buildingDef.name}</b><br/><small>Choose something to craft:</small><br/><br/>`;
   
       recipes.forEach(recipe => {
-        const alreadyOwned = playerInventory.has(recipe.id);
+        const isGear = recipe.type !== 'resource';
+        const alreadyOwned = isGear && playerInventory.has(recipe.id);
         const costEntries = Object.entries(recipe.costs);
         const canAfford = costEntries.every(([res, amt]) => getResource(res) >= amt);
         const costText = costEntries.map(([res, amt]) => `${amt} ${res}`).join(', ');
-  
+      
         let buttonLabel, buttonDisabled;
         if (alreadyOwned) {
           buttonLabel = '✅ Already Owned';
@@ -1931,10 +1944,10 @@
           buttonLabel = '❌ Not Enough Resources';
           buttonDisabled = true;
         } else {
-          buttonLabel = `🛠️ Craft ${recipe.name}`;
+          buttonLabel = isGear ? `🛠️ Craft ${recipe.name}` : `🔥 Smelt ${recipe.name}`;
           buttonDisabled = false;
         }
-  
+      
         html += `
           <div style="margin-bottom:10px;">
             <b>${recipe.icon} ${recipe.name}</b><br/>
@@ -1948,15 +1961,16 @@
           </div>
         `;
       });
-  
+      
       container.innerHTML = html;
-  
+      
       recipes.forEach(recipe => {
-        if (playerInventory.has(recipe.id)) return;
-  
+        const isGear = recipe.type !== 'resource';
+        if (isGear && playerInventory.has(recipe.id)) return;
+      
         const canAfford = Object.entries(recipe.costs).every(([res, amt]) => getResource(res) >= amt);
         if (!canAfford) return;
-  
+      
         document
           .getElementById(`craft-btn-${recipe.id.replace(/\s+/g, '-')}`)
           .addEventListener('click', () => craftItem(recipe, node));
@@ -1965,24 +1979,29 @@
   }
   
   function craftItem(recipe, buildingNode) {
-    if (playerInventory.has(recipe.id)) return;
+    const isGear = recipe.type !== 'resource';
+  
+    if (isGear && playerInventory.has(recipe.id)) return;
   
     for (const [res, amt] of Object.entries(recipe.costs)) {
       if (getResource(res) < amt) return;
     }
-  
     for (const [res, amt] of Object.entries(recipe.costs)) {
       addResource(res, -amt);
     }
   
-    playerInventory.add(recipe.id);
-    localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+    if (isGear) {
+      playerInventory.add(recipe.id);
+      localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+      showFloatingPopup(`+1 ${recipe.name}`, true);
+      document.getElementById('status').innerText = `Crafted ${recipe.name}!`;
+    } else {
+      addResource(recipe.id, recipe.yieldAmount);
+      showFloatingPopup(`+${recipe.yieldAmount} ${recipe.name}`, true);
+      document.getElementById('status').innerText = `Smelted ${recipe.yieldAmount} ${recipe.name}!`;
+    }
   
     updateInventoryDisplay();
-    showFloatingPopup(`+1 ${recipe.name}`, true);
-  
-    document.getElementById('status').innerText = `Crafted ${recipe.name}!`;
-  
     renderBuildingCard(buildingNode);
   }
 
