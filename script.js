@@ -308,6 +308,40 @@
       }
     }
   };
+  
+  const BASE_COMBAT_SKILL = 10;
+  const BASE_ENDURANCE = 20;
+  
+  const GEAR_DEFS = {
+    woodenSword: {
+      id: 'wooden sword',
+      name: 'Wooden Sword',
+      icon: '🗡️',
+      statType: 'combatSkill', // weapons boost Combat Skill, armor will boost Endurance later
+      modifier: 1,
+      craftedAt: 'workbench',
+      costs: { Wood: 20 }
+    }
+  };
+  
+  function getBestGearModifier(statType) {
+    let best = 0;
+    for (const key in GEAR_DEFS) {
+      const gear = GEAR_DEFS[key];
+      if (gear.statType === statType && playerInventory.has(gear.id)) {
+        if (gear.modifier > best) best = gear.modifier;
+      }
+    }
+    return best;
+  }
+  
+  function getEffectiveCombatSkill() {
+    return BASE_COMBAT_SKILL + getBestGearModifier('combatSkill');
+  }
+  
+  function getEffectiveEndurance() {
+    return BASE_ENDURANCE + getBestGearModifier('endurance');
+  }
 
   let wakeLock = null;
   async function requestWakeLock() {
@@ -459,7 +493,7 @@
   function spawnItems() {
       if (!userLat || !userLng) return;
       if (collectionInterval) return;
-	  if (activeTarget && activeTarget.type === 'item') return;
+	  if (activeTarget && (activeTarget.type === 'item' || activeTarget.type === 'building')) return;
   
       const { gridX: centerGridX, gridY: centerGridY } =
           latLngToGrid(userLat, userLng);
@@ -1591,6 +1625,7 @@
       // Tools
       if (playerInventory.has('axe')) items.push('🪓 Axe');
       if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
+	  if (playerInventory.has('wooden sword')) items.push('🗡️ Wooden Sword');
   
       // Emoji map for dynamic resources
       const resourceEmojis = {
@@ -1792,62 +1827,156 @@
     renderSelectedPlotCard();
   }
   
-  function spawnBuildingOnPlot(plotId, def) {
-    // Don't create duplicates.
-    const existing = document.querySelector(
-      `[data-building-plot="${plotId}"]`
-    );
+  let buildingNodes = {}; // { plotId: { lat, lng, marker, def, plotId } }
   
-    if (existing) {
-      existing.remove();
+  function spawnBuildingOnPlot(plotId, def) {
+    // Remove any existing marker for this plot before recreating it.
+    if (buildingNodes[plotId]?.marker) {
+      buildingNodes[plotId].marker.remove();
     }
   
     // plot_123_456
     const parts = plotId.split('_');
-  
     if (parts.length !== 3) return;
   
     const gridY = Number(parts[1]);
     const gridX = Number(parts[2]);
-  
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return;
   
-    // Exact center of the plot.
-    const buildingLat =
-      (gridY + 0.50) * LAT_GRID_SIZE_DEG;
-  
-    const buildingLng =
-      (gridX + 0.50) * LNG_GRID_SIZE_DEG;
+    const buildingLat = (gridY + 0.50) * LAT_GRID_SIZE_DEG;
+    const buildingLng = (gridX + 0.50) * LNG_GRID_SIZE_DEG;
   
     const container = document.createElement('div');
-  
     container.className = 'building-marker-container';
     container.dataset.buildingPlot = plotId;
-  
     container.style.width = `${def.width}px`;
     container.style.height = `${def.height}px`;
-    container.style.pointerEvents = 'none';
   
     const img = document.createElement('img');
-  
     img.src = def.image;
     img.width = def.width;
     img.height = def.height;
-  
     img.style.width = `${def.width}px`;
     img.style.height = `${def.height}px`;
     img.style.imageRendering = 'pixelated';
-    img.style.imageRendering = 'crisp-edges';
     img.style.filter = 'drop-shadow(0px 4px 6px rgba(0,0,0,0.4))';
   
     container.appendChild(img);
   
-    new maplibregl.Marker({
+    const marker = new maplibregl.Marker({
       element: container,
       anchor: 'center'
     })
       .setLngLat([buildingLng, buildingLat])
       .addTo(map);
+  
+    buildingNodes[plotId] = { lat: buildingLat, lng: buildingLng, marker, def, plotId };
+  
+    container.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelAnyActiveCollection();
+      clearSelectedPlot();
+      closeBackpackIfOpen(false);
+      ensureUIPanelVisible();
+      renderBuildingCard(buildingNodes[plotId]);
+    });
+  }
+  
+  function renderBuildingCard(node) {
+    const container = document.getElementById('plot-info');
+    const buildingDef = node.def;
+  
+    startLiveDistanceUpdates("building", node, dist => {
+      const inRange = Number(dist) <= INTERACTION_RADIUS_FEET;
+  
+      if (!inRange) {
+        container.innerHTML = `
+          <b>${buildingDef.name}:</b><br/>
+          <b>Distance:</b> ${dist} ft away<br/>
+          <small style="color:#f7f7f7;">Walk within ${INTERACTION_RADIUS_FEET} ft to use.</small>
+        `;
+        return;
+      }
+  
+      const recipes = Object.values(GEAR_DEFS).filter(g => g.craftedAt === buildingDef.id);
+  
+      if (recipes.length === 0) {
+        container.innerHTML = `
+          <b>${buildingDef.name}</b><br/>
+          <small>Nothing to craft here yet.</small>
+        `;
+        return;
+      }
+  
+      let html = `<b>${buildingDef.name}</b><br/><small>Choose something to craft:</small><br/><br/>`;
+  
+      recipes.forEach(recipe => {
+        const alreadyOwned = playerInventory.has(recipe.id);
+        const costEntries = Object.entries(recipe.costs);
+        const canAfford = costEntries.every(([res, amt]) => getResource(res) >= amt);
+        const costText = costEntries.map(([res, amt]) => `${amt} ${res}`).join(', ');
+  
+        let buttonLabel, buttonDisabled;
+        if (alreadyOwned) {
+          buttonLabel = '✅ Already Owned';
+          buttonDisabled = true;
+        } else if (!canAfford) {
+          buttonLabel = '❌ Not Enough Resources';
+          buttonDisabled = true;
+        } else {
+          buttonLabel = `🛠️ Craft ${recipe.name}`;
+          buttonDisabled = false;
+        }
+  
+        html += `
+          <div style="margin-bottom:10px;">
+            <b>${recipe.icon} ${recipe.name}</b><br/>
+            <small>Requires: ${costText}</small><br/>
+            <button id="craft-btn-${recipe.id.replace(/\s+/g, '-')}"
+                    class="btn buy-btn"
+                    style="margin-top:4px;"
+                    ${buttonDisabled ? 'disabled' : ''}>
+              ${buttonLabel}
+            </button>
+          </div>
+        `;
+      });
+  
+      container.innerHTML = html;
+  
+      recipes.forEach(recipe => {
+        if (playerInventory.has(recipe.id)) return;
+  
+        const canAfford = Object.entries(recipe.costs).every(([res, amt]) => getResource(res) >= amt);
+        if (!canAfford) return;
+  
+        document
+          .getElementById(`craft-btn-${recipe.id.replace(/\s+/g, '-')}`)
+          .addEventListener('click', () => craftItem(recipe, node));
+      });
+    });
+  }
+  
+  function craftItem(recipe, buildingNode) {
+    if (playerInventory.has(recipe.id)) return;
+  
+    for (const [res, amt] of Object.entries(recipe.costs)) {
+      if (getResource(res) < amt) return;
+    }
+  
+    for (const [res, amt] of Object.entries(recipe.costs)) {
+      addResource(res, -amt);
+    }
+  
+    playerInventory.add(recipe.id);
+    localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
+  
+    updateInventoryDisplay();
+    showFloatingPopup(`+1 ${recipe.name}`, true);
+  
+    document.getElementById('status').innerText = `Crafted ${recipe.name}!`;
+  
+    renderBuildingCard(buildingNode);
   }
 
   function buySelectedPlot() {
