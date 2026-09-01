@@ -1647,6 +1647,13 @@
   
       const listText = items.length > 0 ? items.join(', ') : 'Empty';
       document.getElementById('inv-items-list').innerText = listText;
+	  
+      // Update bottom stat bar
+      const combatElem = document.getElementById('stat-combat-skill');
+      const enduranceElem = document.getElementById('stat-endurance');
+      if (combatElem) combatElem.innerText = getEffectiveCombatSkill();
+      if (enduranceElem) enduranceElem.innerText = getEffectiveEndurance();	
+	
   }
 
   function renderSelectedPlotCard() {

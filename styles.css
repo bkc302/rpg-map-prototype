@@ -532,6 +532,42 @@
       transform-origin: center center;
     }
 
+    #stats-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+    
+      display: flex;
+      gap: 10px;
+    }
+    
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    
+      height: 52px;
+      padding: 0 16px;
+    
+      background: rgba(15, 23, 42, 0.85);
+      border: 2px solid #334155;
+      border-radius: 26px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+    
+      color: #e6edf3;
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    
+    .stat-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
     /* Outer Marker Containers (Positioned by MapLibre) */
     .player-marker-container {
 	  z-index: 100;
