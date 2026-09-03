@@ -438,15 +438,26 @@
   });
 
   // Global degree steps
-  const LAT_GRID_SIZE_DEG = 0.00045; // Fixed height (~50m)
+  const LAT_GRID_SIZE_DEG = 0.00045;
   let LNG_GRID_SIZE_DEG = 0.00045;
-  let gridInitialized = false;
+  
+  const LNG_GRID_SIZE_STORAGE_KEY = 'rpg_lng_grid_size_deg';
   
   function initGridScaling(lat) {
-    if (gridInitialized) return;
-    const rad = lat * Math.PI / 180;
-    LNG_GRID_SIZE_DEG = LAT_GRID_SIZE_DEG / Math.cos(rad);
-    gridInitialized = true;
+      const savedGridSize = localStorage.getItem(LNG_GRID_SIZE_STORAGE_KEY);
+  
+      if (savedGridSize !== null) {
+          LNG_GRID_SIZE_DEG = Number(savedGridSize);
+          return;
+      }
+  
+      const rad = lat * Math.PI / 180;
+      LNG_GRID_SIZE_DEG = LAT_GRID_SIZE_DEG / Math.cos(rad);
+  
+      localStorage.setItem(
+          LNG_GRID_SIZE_STORAGE_KEY,
+          LNG_GRID_SIZE_DEG.toString()
+      );
   }
   
   function latLngToGrid(lat, lng) {
@@ -2082,6 +2093,7 @@
 		  localStorage.removeItem('rpg_buildings');
           
           localStorage.removeItem("rpg_quest_state");
+		  localStorage.removeItem(LNG_GRID_SIZE_STORAGE_KEY);
           questState = {};
           
           playerGold = 0;
