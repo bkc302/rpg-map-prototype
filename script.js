@@ -321,10 +321,60 @@
       id: 'wooden sword',
       name: 'Wooden Sword',
       icon: '🗡️',
-      statType: 'combatSkill', // weapons boost Combat Skill, armor will boost Endurance later
+      statType: 'combatSkill',
       modifier: 1,
       craftedAt: 'workbench',
       costs: { Wood: 20 }
+    },
+  
+    bronzeSword: {
+      id: 'bronze sword',
+      name: 'Bronze Sword',
+      icon: '🗡️',
+      statType: 'combatSkill',
+      modifier: 2,
+      craftedAt: 'workbench',
+      costs: { 'Bronze Ingot': 4 }
+    },
+  
+    ironSword: {
+      id: 'iron sword',
+      name: 'Iron Sword',
+      icon: '🗡️',
+      statType: 'combatSkill',
+      modifier: 3,
+      craftedAt: 'workbench',
+      costs: { 'Iron Ingot': 6 }
+    },
+  
+    woodenShield: {
+      id: 'wooden shield',
+      name: 'Wooden Shield',
+      icon: '🛡️',
+      statType: 'endurance',
+      modifier: 1,
+      craftedAt: 'workbench',
+      costs: { Wood: 20 }
+    },
+  
+    bronzeShield: {
+      id: 'bronze shield',
+      name: 'Bronze Shield',
+      icon: '🛡️',
+      statType: 'endurance',
+      modifier: 2,
+      craftedAt: 'workbench',
+      costs: { 'Bronze Ingot': 4 }
+    },
+  
+    ironShield: {
+      id: 'iron shield',
+      name: 'Iron Shield',
+      icon: '🛡️',
+      statType: 'endurance',
+      modifier: 3,
+      craftedAt: 'workbench',
+      costs: { 'Iron Ingot': 6 }
     }
   };
   
@@ -1687,6 +1737,11 @@
       if (playerInventory.has('axe')) items.push('🪓 Axe');
       if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
 	  if (playerInventory.has('wooden sword')) items.push('🗡️ Wooden Sword');
+	  if (playerInventory.has('bronze sword')) items.push('🗡️ Bronze Sword');
+	  if (playerInventory.has('iron sword')) items.push('🗡️ Iron Sword');
+	  if (playerInventory.has('wooden shield')) items.push('🛡 Wooden Shield');
+	  if (playerInventory.has('bronze shield')) items.push('🛡 Bronze Shield');
+	  if (playerInventory.has('iron shield')) items.push('🛡 Iron Shield');
   
       // Emoji map for dynamic resources
       const resourceEmojis = {
