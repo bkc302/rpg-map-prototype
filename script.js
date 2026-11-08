@@ -3,6 +3,9 @@
   let gameStarted = false;
   let autoCenterEnabled = true;
   let compassActive = false;
+  let smoothedHeading = null;
+  let headingFrameQueued = false;
+  let allowLowAccuracyStart = false;
   
   let activeTarget = null;
   let distanceInterval = null;
@@ -184,7 +187,7 @@
   
       requiredTool: 'axe',
   
-      percentage: 25, //25 percent chance that a tile can be a tree
+      percentage: 25, // 25% of ALL tiles get a tree
   
       normalWidth: 96,
       normalHeight: 96,
@@ -208,7 +211,7 @@
     
       requiredTool: 'mining pick',
     
-      percentage: 25, //25 percent chance that a tile can be stone
+      percentage: 19, // 19% of ALL tiles get stone
     
       normalWidth: 48,
       normalHeight: 48,
@@ -232,7 +235,7 @@
     
       requiredTool: 'mining pick',
     
-      percentage: 15, //15 percent chance that a tile can be copper
+      percentage: 8, // 8% of ALL tiles get copper
     
       normalWidth: 48,
       normalHeight: 48,
@@ -256,7 +259,7 @@
     
       requiredTool: 'mining pick',
     
-      percentage: 15, //15 percent chance that a tile can be tin
+      percentage: 7, // 7% of ALL tiles get tin
     
       normalWidth: 48,
       normalHeight: 48,
@@ -280,7 +283,7 @@
     
       requiredTool: 'mining pick',
     
-      percentage: 13, //13 percent chance that a tile can be iron
+      percentage: 5, // 5% of ALL tiles get iron
     
       normalWidth: 48,
       normalHeight: 48,
@@ -598,13 +601,65 @@
   }
   
   function getItemStorageKey(itemDef, tileKey) {
-    return `rpg_item_${itemDef.id}_${tileKey}`;
+    return `${itemDef.id}_${tileKey}`;
   }
+
+  const COLLECTED_STORAGE_KEY = 'rpg_collected_items';
+  let collectedItems = {};
+
+  function saveCollectedItems() {
+    try {
+      localStorage.setItem(COLLECTED_STORAGE_KEY, JSON.stringify(collectedItems));
+    } catch (err) {}
+  }
+
+  // Drops entries whose respawn time has passed. Returns true if anything was removed.
+  function pruneCollectedItems() {
+    const now = Date.now();
+    let changed = false;
+    for (const key of Object.keys(collectedItems)) {
+      const def = ITEM_DEFS[key.split('_')[0]];
+      const t = collectedItems[key];
+      if (!def || !(t > 0) || now - t >= def.respawnMs) {
+        delete collectedItems[key];
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function loadCollectedItems() {
+    try {
+      collectedItems = JSON.parse(localStorage.getItem(COLLECTED_STORAGE_KEY) || '{}') || {};
+    } catch (err) {
+      collectedItems = {};
+    }
+
+    // One-time migration of the old one-key-per-tile format.
+    const PREFIX = 'rpg_item_';
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith(PREFIX)) continue;
+      const t = parseInt(localStorage.getItem(k) || '0', 10);
+      const newKey = k.slice(PREFIX.length);
+      if (t > 0 && !(collectedItems[newKey] >= t)) collectedItems[newKey] = t;
+      localStorage.removeItem(k);
+    }
+
+    pruneCollectedItems();
+    saveCollectedItems();
+  }
+
+  function isItemCollected(def, tileKey) {
+    const t = collectedItems[getItemStorageKey(def, tileKey)] || 0;
+    return t > 0 && Date.now() - t < def.respawnMs;
+  }
+
+  loadCollectedItems();
   
   function spawnItems() {
       if (!userLat || !userLng) return;
       if (collectionInterval) return;
-	  if (activeTarget && (activeTarget.type === 'item' || activeTarget.type === 'building')) return;
+	  const priorTarget = activeTarget;
   
       const { gridX: centerGridX, gridY: centerGridY } =
           latLngToGrid(userLat, userLng);
@@ -646,19 +701,17 @@
           if (claimedPlotIds.has(plotId)) continue;
           
           // Determine which resource, if any, belongs on this tile.
+          // One roll per tile, so each percentage is the true share of all tiles.
+          const tileRoll = getTileRandom(cell.gridX, cell.gridY);
           let selectedDef = null;
-  
+          let cumulative = 0;
+
           for (const itemKey in ITEM_DEFS) {
-              const def = ITEM_DEFS[itemKey];
-  
-              const score = getItemPlacementScore(
-                  cell.gridX,
-                  cell.gridY,
-                  def.id
-              );
-  
-              if (score < def.percentage / 100) {
-                  selectedDef = def;
+              const d = ITEM_DEFS[itemKey];
+              cumulative += d.percentage / 100;
+
+              if (tileRoll < cumulative) {
+                  selectedDef = d;
                   break;
               }
           }
@@ -676,17 +729,7 @@
   
           // Check whether this exact resource on this exact tile
           // is currently collected.
-          const storageKey =
-              getItemStorageKey(def, tileKey);
-  
-          const collectedAt = parseInt(
-              localStorage.getItem(storageKey) || '0',
-              10
-          );
-  
-          const isCollected =
-              collectedAt > 0 &&
-              Date.now() - collectedAt < def.respawnMs;
+          const isCollected = isItemCollected(def, tileKey);
   
           const container = document.createElement('div');
           container.className = 'item-marker-container';
@@ -759,8 +802,32 @@
       }
   
       updateItemVisibility();
+
+      // The grid was rebuilt, so re-attach any open item/building card to the fresh node.
+      if (priorTarget && priorTarget === activeTarget) {
+          let rebound = false;
+
+          if (priorTarget.type === 'item') {
+              const n = activeItemNodes.find(x => x.id === priorTarget.node.id);
+              if (n && !n.isCollected) {
+                  renderItemCard(n);
+                  rebound = true;
+              }
+          } else if (priorTarget.type === 'building') {
+              const b = buildingNodes[priorTarget.node.plotId];
+              if (b) {
+                  renderBuildingCard(b);
+                  rebound = true;
+              }
+          }
+
+          if (!rebound) {
+              stopLiveDistanceUpdates();
+              renderSelectedPlotCard();
+          }
+      }
   }
-  
+
   function renderItemCard(node) {
     const container = document.getElementById('plot-info');
   
@@ -821,11 +888,9 @@
       node.isCollected = true;
   
       // Persist the collected state immediately.
-      const itemStorageKey = getItemStorageKey(def, node.tileKey);
-      localStorage.setItem(
-          itemStorageKey,
-          Date.now().toString()
-      );
+      collectedItems[getItemStorageKey(def, node.tileKey)] = Date.now();
+      pruneCollectedItems();
+      saveCollectedItems();
   
       // Give the player the resource.
       const yieldWeights = def.yieldWeights;
@@ -892,17 +957,37 @@
   
       node.element.style.display = 'flex';
   
-      node.img.src = isZoomedOut
-        ? def.zoomImage
-        : def.mainImage;
+      const wantedSrc = isZoomedOut ? def.zoomImage : def.mainImage;
+      if (node.img.getAttribute('src') !== wantedSrc) node.img.src = wantedSrc;
     });
   }
   
+  function checkItemRespawns() {
+    let changed = false;
+
+    for (const node of activeItemNodes) {
+      if (!node.isCollected) continue;
+      if (isItemCollected(node.def, node.tileKey)) continue;
+
+      node.isCollected = false;
+      node.element.style.pointerEvents = '';
+      node.img.style.display = '';
+      changed = true;
+    }
+
+    if (pruneCollectedItems()) saveCollectedItems();
+    if (changed) updateItemVisibility();
+  }
+
   let collectionInterval = null;
+  let collectionChopTimeouts = [];
   let collectionCancelCheck = null;
   let collectionProgressInterval = null;
 
   function cancelAnyActiveCollection() {
+      collectionChopTimeouts.forEach(id => clearTimeout(id));
+      collectionChopTimeouts = [];
+
       if (collectionInterval) {
           clearTimeout(collectionInterval);
           collectionInterval = null;
@@ -951,12 +1036,12 @@
   
       // Exactly 5 chops: 0s, 1s, 2s, 3s, and 4s.
       for (let i = 0; i < 5; i++) {
-          setTimeout(() => {
+          collectionChopTimeouts.push(setTimeout(() => {
               // Don't play if collection was cancelled.
               if (!collectionInterval) return;
-  
+
               playChopSound();
-          }, i * 1000);
+          }, i * 1000));
       }
   
       // Progress bar animation.
@@ -1024,6 +1109,8 @@
           return;
       }
   
+      if (def.appearsAfterQuest && !isQuestComplete(def.appearsAfterQuest)) return;
+
       const disabled = localStorage.getItem(def.disabledKey) === "true";
       if (disabled) return;
       if (!userLat || !userLng) return;
@@ -1736,12 +1823,10 @@
       // Tools
       if (playerInventory.has('axe')) items.push('🪓 Axe');
       if (playerInventory.has('mining pick')) items.push('⛏️ Mining Pick');
-	  if (playerInventory.has('wooden sword')) items.push('🗡️ Wooden Sword');
-	  if (playerInventory.has('bronze sword')) items.push('🗡️ Bronze Sword');
-	  if (playerInventory.has('iron sword')) items.push('🗡️ Iron Sword');
-	  if (playerInventory.has('wooden shield')) items.push('🛡 Wooden Shield');
-	  if (playerInventory.has('bronze shield')) items.push('🛡 Bronze Shield');
-	  if (playerInventory.has('iron shield')) items.push('🛡 Iron Shield');
+	  for (const gearKey in GEAR_DEFS) {
+        const gear = GEAR_DEFS[gearKey];
+        if (playerInventory.has(gear.id)) items.push(`${gear.icon} ${gear.name}`);
+      }
   
       // Emoji map for dynamic resources
       const resourceEmojis = {
@@ -2139,6 +2224,10 @@
   }
 
   // UI & GEOLOCATION EVENT LISTENERS
+  if (!new URLSearchParams(window.location.search).has('dev')) {
+      document.getElementById('dev-reset-btn').style.display = 'none';
+  }
+
   document.getElementById('dev-reset-btn').addEventListener('click', () => {
       if (confirm("Reset all gold, inventory, resources, buildings, and wipe owned plots?")) {
   
@@ -2146,6 +2235,12 @@
           localStorage.removeItem('rpg_claimed_plots');
           localStorage.removeItem('rpg_player_inventory');
 		  localStorage.removeItem('rpg_buildings');
+          localStorage.removeItem(COLLECTED_STORAGE_KEY);
+          collectedItems = {};
+          for (const pid in buildingNodes) {
+              buildingNodes[pid]?.marker?.remove();
+              delete buildingNodes[pid];
+          }
           
           localStorage.removeItem("rpg_quest_state");
 		  localStorage.removeItem(LNG_GRID_SIZE_STORAGE_KEY);
@@ -2228,6 +2323,25 @@
     document.getElementById('start-status').innerText = 'Acquiring GPS fix...';
 
     geolocate.trigger();
+
+    // If GPS never reaches the required accuracy, let the player start anyway.
+    setTimeout(() => {
+      if (gameStarted || document.getElementById('start-anyway-btn')) return;
+
+      const b = document.createElement('button');
+      b.id = 'start-anyway-btn';
+      b.className = 'btn gps-btn';
+      b.innerText = 'Start anyway (low accuracy)';
+      b.style.marginTop = '12px';
+
+      b.addEventListener('click', () => {
+        allowLowAccuracyStart = true;
+        b.disabled = true;
+        document.getElementById('start-status').innerText = 'Starting on next GPS update...';
+      });
+
+      document.getElementById('start-overlay').appendChild(b);
+    }, 20000);
   });
 
   document.getElementById('autocenter-button').addEventListener('click', () => {
@@ -2293,7 +2407,7 @@
 	  
       if (!gameStarted) {
 	  
-        if (accuracyFt > MIN_START_ACCURACY_FEET) {
+        if (accuracyFt > MIN_START_ACCURACY_FEET && !allowLowAccuracyStart) {
             document.getElementById('start-status').innerText =
                 `Improving GPS signal... (${accuracyFt.toFixed(0)} ft, need ${MIN_START_ACCURACY_FEET} ft)`;
             return;
@@ -2313,6 +2427,7 @@
         initCoinSpawns();
         spawnAvailableNPCs();
         initNPCMovement();
+        setInterval(checkItemRespawns, 30000);
 		
         map.jumpTo({ center: [userLng, userLat], zoom: 17.95 });
       } else {
@@ -2456,6 +2571,7 @@
       if (autoCenterEnabled || compassActive) {
         autoCenterEnabled = false;
         compassActive = false;
+        smoothedHeading = null;
         if (compassBtn) compassBtn.classList.remove('active');
         window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
         window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
@@ -2493,36 +2609,54 @@
       return window.orientation || 0;
     }
 
+    function tiltCompensatedHeading(alpha, beta, gamma) {
+      const rad = Math.PI / 180;
+      const x = (beta || 0) * rad, y = (gamma || 0) * rad, z = (alpha || 0) * rad;
+      const cY = Math.cos(y), cZ = Math.cos(z);
+      const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
+
+      const Vx = -cZ * sY - sZ * sX * cY;
+      const Vy = -sZ * sY + cZ * sX * cY;
+
+      let h = Math.atan(Vx / Vy);
+      if (Vy < 0) h += Math.PI;
+      else if (Vx < 0) h += 2 * Math.PI;
+      return h / rad;
+    }
+
     function getHeadingDegrees(event) {
-      let heading = null;
-      if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
-        heading = event.webkitCompassHeading;
-      } else if (event.alpha !== null && event.alpha !== undefined) {
-        heading = (360 - event.alpha + getScreenOrientationAngle()) % 360;
-      }
-      return heading;
+      // iOS already tilt-compensates this value
+      if (event.webkitCompassHeading != null) return event.webkitCompassHeading;
+      // Android: only trust absolute (true north) readings
+      if (event.alpha == null) return null;
+      if (!event.absolute && event.type !== 'deviceorientationabsolute') return null;
+      return tiltCompensatedHeading(event.alpha, event.beta, event.gamma);
+    }
+
+    function smoothAngle(prev, next, k = 0.15) {
+      if (prev === null) return next;
+      const diff = ((next - prev + 540) % 360) - 180; // shortest way around
+      return (prev + diff * k + 360) % 360;
     }
 
     function handleDeviceOrientation(event) {
-        if (!compassActive) return;
-    
-        const heading = getHeadingDegrees(event);
-    
-        if (heading !== null && !isNaN(heading)) {
-            if (autoCenterEnabled && userLat && userLng) {
-                map.jumpTo({
-                    center: [userLng, userLat],
-                    bearing: heading,
-                    zoom: 17.95
-                });
-            } else {
-                map.rotateTo(heading, { 
-                    duration: 50,
-                    zoom: 17.95
-                });
-            }
-        }
+      if (!compassActive) return;
+      const raw = getHeadingDegrees(event);
+      if (raw === null || isNaN(raw)) return;
+
+      smoothedHeading = smoothAngle(smoothedHeading, raw);
+
+      if (headingFrameQueued) return;
+      headingFrameQueued = true;
+      requestAnimationFrame(() => {
+        headingFrameQueued = false;
+        if (!compassActive || smoothedHeading === null) return;
+        const opts = { bearing: smoothedHeading };
+        if (autoCenterEnabled && userLat && userLng) opts.center = [userLng, userLat];
+        map.jumpTo(opts);
+      });
     }
+
 
     function updateCompassUI() {
       if (!compassNeedle) return;
@@ -2535,6 +2669,7 @@
     if (compassBtn) {
       compassBtn.addEventListener('click', async () => {
         compassActive = !compassActive;
+        smoothedHeading = null;
 
         if (compassActive) {
           autoCenterEnabled = true;
