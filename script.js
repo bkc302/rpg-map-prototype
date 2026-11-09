@@ -6,6 +6,7 @@
   let smoothedHeading = null;
   let headingFrameQueued = false;
   let allowLowAccuracyStart = false;
+  let gridAreaWarned = false;
   
   let activeTarget = null;
   let distanceInterval = null;
@@ -491,33 +492,136 @@
   });
 
   // Global degree steps
-  const LAT_GRID_SIZE_DEG = 0.00045;
-  let LNG_GRID_SIZE_DEG = 0.00045;
-  
-  const LNG_GRID_SIZE_STORAGE_KEY = 'rpg_lng_grid_size_deg';
-  
-  function initGridScaling(lat) {
-      const savedGridSize = localStorage.getItem(LNG_GRID_SIZE_STORAGE_KEY);
-  
-      if (savedGridSize !== null) {
-          LNG_GRID_SIZE_DEG = Number(savedGridSize);
-          return;
-      }
-  
-      const rad = lat * Math.PI / 180;
-      LNG_GRID_SIZE_DEG = LAT_GRID_SIZE_DEG / Math.cos(rad);
-  
-      localStorage.setItem(
-          LNG_GRID_SIZE_STORAGE_KEY,
-          LNG_GRID_SIZE_DEG.toString()
-      );
+  // US-only grid. Every tile is a true square of GRID_CELL_M meters, laid out in a
+  // Lambert Conformal Conic projection (the standard projection for maps of the lower 48).
+  // This projection keeps shapes square and keeps size within about 1% across the whole
+  // continental US (roughly 162-165 ft per tile). The tradeoff is that the grid rotates a
+  // little relative to north as you move east or west of GRID_CENTRAL_LNG.
+  const GRID_CELL_M = 50;
+  const EARTH_R = 6371000;                 // matches getDistanceFeet()
+  const GRID_CENTRAL_LNG = -83;            // grid is perfectly aligned with north along this meridian (eastern KY)
+  const GRID_ORIGIN_LAT = 39;
+  const GRID_PARALLEL_1 = 29.75;
+  const GRID_PARALLEL_2 = 44.5;
+
+  const LNG_GRID_SIZE_STORAGE_KEY = 'rpg_lng_grid_size_deg'; // oldest per-player scale (migration only)
+  const GRID_VERSION_KEY = 'rpg_grid_version';
+
+  const LCC_D = Math.PI / 180;
+  const LCC_P1 = GRID_PARALLEL_1 * LCC_D;
+  const LCC_P2 = GRID_PARALLEL_2 * LCC_D;
+  const LCC_N = Math.log(Math.cos(LCC_P1) / Math.cos(LCC_P2)) /
+                Math.log(Math.tan(Math.PI / 4 + LCC_P2 / 2) / Math.tan(Math.PI / 4 + LCC_P1 / 2));
+  const LCC_F = Math.cos(LCC_P1) * Math.pow(Math.tan(Math.PI / 4 + LCC_P1 / 2), LCC_N) / LCC_N;
+  const LCC_LNG0 = GRID_CENTRAL_LNG * LCC_D;
+
+  function lccRho(lat) {
+    return EARTH_R * LCC_F / Math.pow(Math.tan(Math.PI / 4 + (lat * LCC_D) / 2), LCC_N);
   }
-  
+
+  const LCC_RHO0 = lccRho(GRID_ORIGIN_LAT);
+
+  function projectLatLng(lat, lng, lng0Rad = LCC_LNG0) {
+    const theta = LCC_N * (lng * LCC_D - lng0Rad);
+    const rho = lccRho(lat);
+    return { x: rho * Math.sin(theta), y: LCC_RHO0 - rho * Math.cos(theta) };
+  }
+
+  function unprojectXY(x, y, lng0Rad = LCC_LNG0) {
+    const dy = LCC_RHO0 - y;
+    const rho = Math.sqrt(x * x + dy * dy);
+    const theta = Math.atan2(x, dy);
+    const lat = (2 * Math.atan(Math.pow(EARTH_R * LCC_F / rho, 1 / LCC_N)) - Math.PI / 2) / LCC_D;
+    const lng = (lng0Rad + theta / LCC_N) / LCC_D;
+    return { lat, lng };
+  }
+
   function latLngToGrid(lat, lng) {
+    const p = projectLatLng(lat, lng);
     return {
-      gridX: Math.floor(lng / LNG_GRID_SIZE_DEG),
-      gridY: Math.floor(lat / LAT_GRID_SIZE_DEG)
+      gridX: Math.floor(p.x / GRID_CELL_M),
+      gridY: Math.floor(p.y / GRID_CELL_M)
     };
+  }
+
+  // gx/gy may include a fraction (e.g. cell + 0.5 = the cell's center).
+  function gridToLatLng(gx, gy) {
+    return unprojectXY(gx * GRID_CELL_M, gy * GRID_CELL_M);
+  }
+
+  // Roughly the lower 48 (the grid still works outside, but tiles are tilted/resized).
+  function isInSupportedArea(lat, lng) {
+    return lat >= 24.3 && lat <= 49.6 && lng >= -125.2 && lng <= -66.5;
+  }
+
+  // Converts saves made with an older grid to the current one (runs once).
+  //   no flag + old per-player scale key -> original grid (0.00045 deg x saved lng step)
+  //   flag '2'                            -> short-lived Mercator grid (0.00059 deg)
+  //   flag '3'                            -> US grid that was aligned along 96 W
+  function migrateGridIfNeeded() {
+    const version = localStorage.getItem(GRID_VERSION_KEY);
+    if (version === '4') return;
+
+    let centerOf = null; // (oldGridX, oldGridY) -> { lat, lng } of that old cell's center
+
+    if (version === '3') {
+      const OLD_LNG0 = -96 * LCC_D;
+      centerOf = (gx, gy) => unprojectXY(
+        (gx + 0.5) * GRID_CELL_M,
+        (gy + 0.5) * GRID_CELL_M,
+        OLD_LNG0
+      );
+    } else if (version === '2') {
+      const CELL = 0.00059;
+      centerOf = (gx, gy) => ({
+        lat: (2 * Math.atan(Math.exp((gy + 0.5) * CELL * LCC_D)) - Math.PI / 2) / LCC_D,
+        lng: (gx + 0.5) * CELL
+      });
+    } else {
+      const oldLngDeg = Number(localStorage.getItem(LNG_GRID_SIZE_STORAGE_KEY));
+      if (oldLngDeg > 0 && isFinite(oldLngDeg)) {
+        centerOf = (gx, gy) => ({ lat: (gy + 0.5) * 0.00045, lng: (gx + 0.5) * oldLngDeg });
+      }
+    }
+
+    if (centerOf) {
+      const convert = (plotId) => {
+        const parts = plotId.split('_');
+        if (parts.length !== 3) return null;
+        const oy = Number(parts[1]);
+        const ox = Number(parts[2]);
+        if (!isFinite(ox) || !isFinite(oy)) return null;
+
+        const c = centerOf(ox, oy);
+        const g = latLngToGrid(c.lat, c.lng);
+        return `plot_${g.gridY}_${g.gridX}`;
+      };
+
+      const oldPlots = [...claimedPlotIds];
+      const oldBuildings = Object.assign({}, plotBuildings);
+
+      claimedPlotIds.clear();
+      for (const k of Object.keys(plotBuildings)) delete plotBuildings[k];
+
+      for (const id of oldPlots) {
+        const n = convert(id);
+        if (n) claimedPlotIds.add(n);
+      }
+      for (const [id, b] of Object.entries(oldBuildings)) {
+        const n = convert(id);
+        if (n) plotBuildings[n] = b;
+      }
+
+      localStorage.setItem('rpg_claimed_plots', JSON.stringify([...claimedPlotIds]));
+      localStorage.setItem('rpg_buildings', JSON.stringify(plotBuildings));
+
+      // Resource cooldowns were tied to the old tiles, so let everything respawn.
+      collectedItems = {};
+      saveCollectedItems();
+    }
+
+    localStorage.removeItem(LNG_GRID_SIZE_STORAGE_KEY);
+    localStorage.setItem(GRID_VERSION_KEY, '4');
   }
 
   function getDistanceFeet(lat1, lon1, lat2, lon2) {
@@ -531,22 +635,52 @@
     return distanceMeters * 3.28084;
   }
   
+  // Changes whenever gold, tools or resources change, so cards know when to redraw.
+  function getStateSignature() {
+      const names = [
+          ...Object.values(ITEM_DEFS).map(d => d.resourceName),
+          ...Object.values(SMELTING_RECIPES).map(r => r.id)
+      ];
+
+      return [
+          playerGold,
+          [...playerInventory].join(','),
+          names.map(n => getResource(n)).join(',')
+      ].join('|');
+  }
+
   function startLiveDistanceUpdates(targetType, targetNode, renderFn) {
       if (distanceInterval) clearInterval(distanceInterval);
   
       activeTarget = { type: targetType, node: targetNode };
   
+      let lastKey = null;
+      let lastFirstNode = null;
+
       function update() {
           if (!userLat || !userLng) return;
-  
-          const dist = getDistanceFeet(
+
+          const distRaw = getDistanceFeet(
               userLat,
               userLng,
               targetNode.lat,
               targetNode.lng
-          ).toFixed(0);
-  
-          renderFn(dist);
+          );
+
+          const inRange = distRaw <= INTERACTION_RADIUS_FEET;
+          const box = document.getElementById('plot-info');
+
+          // While in range the card shows buttons, so only rebuild it when something
+          // that affects it changes (or something else overwrote the card).
+          const key = inRange
+              ? `in|${getStateSignature()}`
+              : `out|${distRaw.toFixed(0)}`;
+
+          if (key === lastKey && box && box.firstChild === lastFirstNode) return;
+
+          lastKey = key;
+          renderFn(distRaw.toFixed(0));
+          lastFirstNode = box ? box.firstChild : null;
       }
   
       update();
@@ -721,11 +855,8 @@
   
           const def = selectedDef;
   
-          const itemLat =
-              (cell.gridY + 0.50) * LAT_GRID_SIZE_DEG;
-  
-          const itemLng =
-              (cell.gridX + 0.50) * LNG_GRID_SIZE_DEG;
+          const { lat: itemLat, lng: itemLng } =
+              gridToLatLng(cell.gridX + 0.50, cell.gridY + 0.50);
   
           // Check whether this exact resource on this exact tile
           // is currently collected.
@@ -862,7 +993,7 @@
   
       container.innerHTML = `
         <b>${def.name}:</b><br/>
-        <b>Distance:</b> ${dist} ft away (In Range)<br/>
+        <b>✅ In range</b><br/>
         <button id="collect-item-btn"
                 class="btn buy-btn"
                 style="margin-top:6px;">
@@ -913,8 +1044,7 @@
       // Trigger the item popup above the player's head
       showItemPopup(yieldAmount, def.resourceName);
       
-      document.getElementById('status').innerText =
-          `Collected +${yieldAmount} ${def.resourceName}!`;
+      showToast(`Collected +${yieldAmount} ${def.resourceName}!`, 4500);
   
       stopLiveDistanceUpdates();
   
@@ -1134,8 +1264,8 @@
       const targetGridX = gridX + offsetX;
       const targetGridY = gridY + offsetY;
   
-      const npcLat = (targetGridY + def.offsetY) * LAT_GRID_SIZE_DEG;
-      const npcLng = (targetGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
+      const { lat: npcLat, lng: npcLng } =
+          gridToLatLng(targetGridX + def.offsetX, targetGridY + def.offsetY);
   
       const container = document.createElement("div");
       container.className = "npc-marker-container";
@@ -1192,8 +1322,7 @@
       const { gridX, gridY } = latLngToGrid(userLat, userLng);
       const radius = def.spawnRadius;
   
-      const currentGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
-      const currentGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
+      const { gridX: currentGridX, gridY: currentGridY } = latLngToGrid(node.lat, node.lng);
   
       const offsetX = Math.floor(Math.random() * 3) - 1;
       const offsetY = Math.floor(Math.random() * 3) - 1;
@@ -1201,8 +1330,9 @@
       let newGridX = Math.max(gridX - radius, Math.min(gridX + radius, currentGridX + offsetX));
       let newGridY = Math.max(gridY - radius, Math.min(gridY + radius, currentGridY + offsetY));
   
-      node.lat = (newGridY + def.offsetY) * LAT_GRID_SIZE_DEG;
-      node.lng = (newGridX + def.offsetX) * LNG_GRID_SIZE_DEG;
+      const moved = gridToLatLng(newGridX + def.offsetX, newGridY + def.offsetY);
+      node.lat = moved.lat;
+      node.lng = moved.lng;
   
       node.marker.setLngLat([node.lng, node.lat]);
       if (node.indicatorMarker) {
@@ -1220,8 +1350,7 @@
       if (!node || !userLat || !userLng) return;
   
       const { gridX, gridY } = latLngToGrid(userLat, userLng);
-      const npcGridX = Math.floor(node.lng / LNG_GRID_SIZE_DEG);
-      const npcGridY = Math.floor(node.lat / LAT_GRID_SIZE_DEG);
+      const { gridX: npcGridX, gridY: npcGridY } = latLngToGrid(node.lat, node.lng);
   
       if (Math.abs(npcGridX - gridX) > 4 ||
           Math.abs(npcGridY - gridY) > 4) {
@@ -1324,7 +1453,7 @@
       updateInventoryDisplay();
       updateAllQuestIndicators();
       
-      document.getElementById("status").innerText = `Acquired ${def.tradeItem}!`;
+      showToast(`Acquired ${def.tradeItem}!`, 4500);
       
       // NPC has left, so clear their card from the UI.
       stopLiveDistanceUpdates();
@@ -1525,7 +1654,7 @@
               // Spawn any quest NPCs unlocked by completing this quest.
               spawnQuestNPCsUnlockedByQuest(nextQuest.questId);
               
-              document.getElementById('status').innerText = dialog.completed;
+              showToast(dialog.completed, 8000);
           
               if (nextQuest.disappearOnComplete && node.marker) {
                   node.marker.remove();
@@ -1546,6 +1675,25 @@
       });
   }
   
+  let toastTimer = null;
+
+  function showToast(message, ms = 4000) {
+    let el = document.getElementById('game-toast');
+
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'game-toast';
+      el.className = 'game-toast'; // styled in styles.css
+      document.body.appendChild(el);
+    }
+
+    el.textContent = message;
+    el.style.opacity = '1';
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
+  }
+
   function showFloatingPopup(textString, isItem = false) {
     if (!userLat || !userLng) return;
   
@@ -1674,8 +1822,8 @@
       if (activeGoldNodes.some(node => node.slotId === slotId)) continue;
   
       const pos = POSITIONS[slotIndex];
-      const goldLat = (targetGridY + pos.y) * LAT_GRID_SIZE_DEG;
-      const goldLng = (targetGridX + pos.x) * LNG_GRID_SIZE_DEG;
+      const { lat: goldLat, lng: goldLng } =
+        gridToLatLng(targetGridX + pos.x, targetGridY + pos.y);
   
       const weights = [1, 1, 1, 1, 1, 1, 2, 2, 3, 4, 5];
       const coinValue = weights[Math.floor(Math.random() * weights.length)];
@@ -1768,11 +1916,10 @@
   }
 
   function createPlotFeature(gridX, gridY) {
-    const minLat = gridY * LAT_GRID_SIZE_DEG;
-    const maxLat = (gridY + 1) * LAT_GRID_SIZE_DEG;
-    
-    const minLng = gridX * LNG_GRID_SIZE_DEG;
-    const maxLng = (gridX + 1) * LNG_GRID_SIZE_DEG;
+    const sw = gridToLatLng(gridX, gridY);
+    const se = gridToLatLng(gridX + 1, gridY);
+    const ne = gridToLatLng(gridX + 1, gridY + 1);
+    const nw = gridToLatLng(gridX, gridY + 1);
   
     const plotId = `plot_${gridY}_${gridX}`;
   
@@ -1785,7 +1932,7 @@
       },
       geometry: {
         type: 'Polygon',
-        coordinates: [[[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]]
+        coordinates: [[[sw.lng, sw.lat], [se.lng, se.lat], [ne.lng, ne.lat], [nw.lng, nw.lat], [sw.lng, sw.lat]]]
       }
     };
   }
@@ -2013,8 +2160,8 @@
     const gridX = Number(parts[2]);
     if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return;
   
-    const buildingLat = (gridY + 0.50) * LAT_GRID_SIZE_DEG;
-    const buildingLng = (gridX + 0.50) * LNG_GRID_SIZE_DEG;
+    const { lat: buildingLat, lng: buildingLng } =
+      gridToLatLng(gridX + 0.50, gridY + 0.50);
   
     const container = document.createElement('div');
     container.className = 'building-marker-container';
@@ -2145,11 +2292,11 @@
       playerInventory.add(recipe.id);
       localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
       showFloatingPopup(`+1 ${recipe.name}`, true);
-      document.getElementById('status').innerText = `Crafted ${recipe.name}!`;
+      showToast(`Crafted ${recipe.name}!`, 4500);
     } else {
       addResource(recipe.id, recipe.yieldAmount);
       showFloatingPopup(`+${recipe.yieldAmount} ${recipe.name}`, true);
-      document.getElementById('status').innerText = `Smelted ${recipe.yieldAmount} ${recipe.name}!`;
+      showToast(`Smelted ${recipe.yieldAmount} ${recipe.name}!`, 4500);
     }
   
     updateInventoryDisplay();
@@ -2330,8 +2477,7 @@
 
       const b = document.createElement('button');
       b.id = 'start-anyway-btn';
-      b.className = 'btn gps-btn';
-      b.innerText = 'Start anyway (low accuracy)';
+            b.innerText = 'Start anyway (low accuracy)';
       b.style.marginTop = '12px';
 
       b.addEventListener('click', () => {
@@ -2401,7 +2547,12 @@
 	  
 	  const accuracyFt = e.coords.accuracy * 3.28084;
       
-      initGridScaling(userLat);    
+      migrateGridIfNeeded();
+
+      if (!gridAreaWarned && !isInSupportedArea(userLat, userLng)) {
+        gridAreaWarned = true;
+        showToast('You appear to be outside the continental US. The game still works, but tiles may be tilted or a different size.', 9000);
+      }    
       if (!wakeLock) requestWakeLock();
       cleanupDistantCoins();
 	  

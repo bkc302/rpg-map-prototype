@@ -183,7 +183,8 @@
     
     /* Start Button */
     
-    #start-btn {
+    #start-btn,
+    #start-anyway-btn {
       width: min(280px, 80vw);
       padding: 12px 20px;
     
@@ -212,12 +213,14 @@
       transition: transform 0.05s, background-color 0.05s, color 0.05s;
     }
     
-    #start-btn:hover {
+    #start-btn:hover,
+    #start-anyway-btn:hover {
       background-color: #72552A;
       color: #FDE176;
     }
     
-    #start-btn:active {
+    #start-btn:active,
+    #start-anyway-btn:active {
       transform: translate(4px, 4px);
       box-shadow:
         inset -4px -4px 0 #261b09,
@@ -253,6 +256,9 @@
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       font-size: 15px;
       display: none; /* Hidden until game starts */
+      max-height: calc(100vh - 110px);
+      max-height: calc(100dvh - 110px);
+      overflow-y: auto;
     }
 
     /* Close Button (inside #ui-panel) */
@@ -335,6 +341,10 @@
       border: 1px solid #30363d;
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
       display: none;
+      box-sizing: border-box;
+      max-height: calc(100vh - 110px);
+      max-height: calc(100dvh - 110px);
+      overflow-y: auto;
     }
 	
     #close-inventory-btn {
@@ -694,4 +704,39 @@
     .maplibregl-ctrl-top-right,
     .maplibregl-ctrl-bottom-right {
       display: none !important;
+    }
+
+    /* ==============================
+       Pop-up messages (loot, crafting, quests)
+       ============================== */
+    .game-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); /* above the stats bar and corner buttons */
+      transform: translateX(-50%);
+      z-index: 10000;
+
+      max-width: calc(100vw - 32px);
+      box-sizing: border-box;
+      padding: 10px 14px;
+
+      border: 3px solid #FBC340;
+      border-radius: 0;
+      background-color: #142814;
+      color: #FDE176;
+
+      font-family: "Courier New", monospace;
+      font-size: 14px;
+      font-weight: bold;
+      line-height: 1.35;
+      text-align: center;
+
+      box-shadow:
+        inset -3px -3px 0 #267A26,
+        inset 3px 3px 0 #503E0E,
+        4px 4px 0 #000000;
+
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s linear;
     }
