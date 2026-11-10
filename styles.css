@@ -861,3 +861,16 @@
       margin-bottom: 14px;
       color: #94a3b8;
     }
+
+    /* ==============================
+       No text selection / long-press menus (it's a game, not a web page)
+       ============================== */
+    * {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    img {
+      -webkit-user-drag: none;
+    }

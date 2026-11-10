@@ -7,6 +7,10 @@
   let headingFrameQueued = false;
   let allowLowAccuracyStart = false;
   let gridAreaWarned = false;
+
+  // Stop long-presses from selecting text or opening the browser's search / context menu.
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('selectstart', e => e.preventDefault());
   
   let activeTarget = null;
   let distanceInterval = null;
