@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
 
-  <link rel="stylesheet" href="styles.css?v=1.2">
+  <link rel="stylesheet" href="styles.css?v=1.3">
   
 </head>
 <body>
@@ -55,6 +55,7 @@
 <!-- Floating Show Button (Always available when panel is hidden) -->
 <button id="toggle-ui-btn" class="ui-button">Explorer Panel</button>
 <button id="inventory-btn" class="ui-button">Backpack</button>
+<button id="quests-btn" class="ui-button">Quests</button>
 
 <div id="inventory-panel">
   <button id="close-inventory-btn">&times;</button>
@@ -64,12 +65,20 @@
   <div id="inv-items-display">Items: <span id="inv-items-list">Empty</span></div>
 </div>
 
+<div id="quests-panel">
+  <button id="close-quests-btn" aria-label="Close Quests">&times;</button>
+
+  <h3>Quests</h3>
+  <div id="quests-list"></div>
+</div>
+
 <!-- Main Game UI Panel -->
 <div id="ui-panel">
   <!-- Close Button -->
   <button id="close-ui-btn" aria-label="Close UI Panel">&times;</button>
 
   <div id="status">GPS Active</div>
+  <div id="quest-tracker" role="button" tabindex="0" title="Open quest list"></div>
   
   <div id="plot-card">
     <div id="plot-info"><i>Tap any square, coin, or NPC to inspect.</i></div>
@@ -184,7 +193,7 @@
   </div>
 </div>
 
-<script src="script.js?v=2.5"></script>
+<script src="script.js?v=2.6"></script>
 
 </body>
 </html>

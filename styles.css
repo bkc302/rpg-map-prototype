@@ -317,17 +317,20 @@
     }
 	
     #toggle-ui-btn,
-    #inventory-btn {
+    #inventory-btn,
+    #quests-btn {
       font-family: "Courier New", monospace;
       font-size: 16px;
     }
 	
-    #inventory-btn:hover {
+    #inventory-btn:hover,
+    #quests-btn:hover {
       background: #21262d;
       border-color: #8b949e;
     }	
     
-    #inventory-panel {
+    #inventory-panel,
+    #quests-panel {
       position: absolute;
       top: 12px;
       left: 12px;
@@ -347,7 +350,8 @@
       overflow-y: auto;
     }
 	
-    #close-inventory-btn {
+    #close-inventory-btn,
+    #close-quests-btn {
       position: absolute;
       top: 4px;
       right: 4px;
@@ -363,12 +367,14 @@
       transition: color 0.15s ease, background-color 0.15s ease;
     }
     
-    #close-inventory-btn:hover {
+    #close-inventory-btn:hover,
+    #close-quests-btn:hover {
       color: #f87171;
       background: rgba(239, 68, 68, 0.15);
     }
 	
-	#inventory-panel h3 {
+	#inventory-panel h3,
+	#quests-panel h3 {
 	margin: 0 0 10px 0;
 	padding-bottom: 6px;
 	border-bottom: 1px solid #30363d;
@@ -739,4 +745,119 @@
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.2s linear;
+    }
+
+    /* ==============================
+       Quests
+       ============================== */
+    #quests-btn {
+      position: absolute;
+      top: 148px;
+      left: 12px;
+      z-index: 999;
+      display: none;
+    }
+
+    #quest-tracker {
+      display: none;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #FDE176;
+      cursor: pointer;
+    }
+
+    .quest-entry {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .quest-title {
+      font-weight: bold;
+      font-size: 15px;
+      color: #FDE176;
+    }
+
+    .quest-giver {
+      margin: 2px 0 8px 0;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .quest-objectives {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .quest-obj {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .quest-obj-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .quest-obj-text {
+      flex: 1;
+    }
+
+    .quest-obj.done .quest-obj-text {
+      color: #4ade80;
+    }
+
+    .quest-obj-count {
+      font-family: "Courier New", monospace;
+      font-weight: bold;
+      color: #FDE176;
+      white-space: nowrap;
+    }
+
+    .quest-obj-bar {
+      height: 6px;
+      margin: 4px 0 0 26px;
+      background: #30363d;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .quest-obj-bar > div {
+      height: 100%;
+      background: #22c55e;
+    }
+
+    .quest-obj-hint {
+      margin: 2px 0 0 26px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .quest-turnin {
+      margin-top: 8px;
+      font-weight: bold;
+      color: #4ade80;
+    }
+
+    .quest-section-title {
+      margin: 4px 0 6px 0;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .quest-complete-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .quests-empty {
+      margin-bottom: 14px;
+      color: #94a3b8;
     }

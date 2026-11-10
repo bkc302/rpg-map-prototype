@@ -109,6 +109,11 @@
           quests: [
               {
                   questId: "bramble_intro_quest",
+                  title: "Buy an Axe",
+                  objectives: [
+                      { text: "Gather gold", count: () => playerGold, max: NPC_DEFS.timberPete.price, doneWhen: () => playerInventory.has("axe") },
+                      { text: "Buy an axe from Timber Pete", flag: () => playerInventory.has("axe") }
+                  ],
                   requiredItems: ["axe"],
                   rewardGold: 20,
                   rewardItems: [],
@@ -122,6 +127,11 @@
               },
               {
                   questId: "bramble_second_quest",
+                  title: "Get a Mining Pick",
+                  objectives: [
+                      { text: "Gather wood", count: () => getResource("Wood"), max: NPC_DEFS.minerGus.price, doneWhen: () => playerInventory.has("mining pick") },
+                      { text: "Trade wood to Miner Gus for a mining pick", flag: () => playerInventory.has("mining pick") }
+                  ],
                   requiredItems: ["mining pick"],
                   rewardGold: 30,
                   rewardItems: [],
@@ -148,6 +158,12 @@
           quests: [
               {
                   questId: "grubwick_crafting_quest",
+                  title: "Build a Workbench",
+                  objectives: [
+                      { text: "Buy a plot of land", flag: () => claimedPlotIds.size > 0, hint: () => `Costs ${PLOT_PRICE} gold. Tap a square on the map.` },
+                      { text: "Build a workbench", flag: () => Object.values(plotBuildings).includes("workbench"), hint: () => `Needs ${formatCosts(BUILDING_DEFS.workbench.costs)}` },
+                      { text: "Craft a wooden sword", flag: () => playerInventory.has("wooden sword"), hint: () => `Needs ${formatCosts(GEAR_DEFS.woodenSword.costs)}, crafted at your workbench` }
+                  ],
                   requiredItems: ["wooden sword"],
                   rewardGold: 50,
                   rewardItems: [],
@@ -1484,12 +1500,158 @@
       }
   }
   
+  function formatCosts(costs) {
+      return Object.entries(costs).map(([res, amt]) => `${amt} ${res}`).join(', ');
+  }
+
+  function getObjectiveStatus(obj) {
+      if (obj.flag) {
+          const done = !!obj.flag();
+          return { done, cur: done ? 1 : 0, max: 1, showCount: false };
+      }
+
+      const raw = Number(obj.count()) || 0;
+      const done = raw >= obj.max || !!(obj.doneWhen && obj.doneWhen());
+
+      return {
+          done,
+          cur: done ? obj.max : Math.min(raw, obj.max),
+          max: obj.max,
+          showCount: true
+      };
+  }
+
+  // Every quest the player can currently see, in order: complete, active or available.
+  function getQuestEntries() {
+      const entries = [];
+
+      for (const key in QUEST_NPC_DEFS) {
+          const npc = QUEST_NPC_DEFS[key];
+          let reachedIncomplete = false;
+
+          for (const quest of npc.quests) {
+              if (isQuestComplete(quest.questId)) {
+                  entries.push({ npc, quest, state: 'complete' });
+                  continue;
+              }
+
+              // Only the first unfinished quest of an NPC is ever shown.
+              if (reachedIncomplete) break;
+              reachedIncomplete = true;
+
+              if (isQuestAccepted(quest.questId)) {
+                  entries.push({ npc, quest, state: 'active' });
+              } else {
+                  const unlocked = !npc.appearsAfterQuest || isQuestComplete(npc.appearsAfterQuest);
+                  const gone = npc.disabledKey && localStorage.getItem(npc.disabledKey) === 'true';
+                  if (unlocked && !gone) entries.push({ npc, quest, state: 'available' });
+              }
+          }
+      }
+
+      return entries;
+  }
+
+  function renderQuestObjectiveHTML(obj) {
+      const st = getObjectiveStatus(obj);
+      const hint = (!st.done && obj.hint) ? (typeof obj.hint === 'function' ? obj.hint() : obj.hint) : '';
+      const pct = Math.round((st.cur / st.max) * 100);
+
+      return `
+        <li class="quest-obj${st.done ? ' done' : ''}">
+          <div class="quest-obj-row">
+            <span class="quest-obj-check">${st.done ? '✅' : '⬜'}</span>
+            <span class="quest-obj-text">${obj.text}</span>
+            ${st.showCount ? `<span class="quest-obj-count">${st.cur}/${st.max}</span>` : ''}
+          </div>
+          ${st.showCount && !st.done ? `<div class="quest-obj-bar"><div style="width:${pct}%"></div></div>` : ''}
+          ${hint ? `<div class="quest-obj-hint">${hint}</div>` : ''}
+        </li>`;
+  }
+
+  function updateQuestUI() {
+      const entries = getQuestEntries();
+      const active = entries.filter(e => e.state === 'active');
+      const available = entries.filter(e => e.state === 'available');
+      const complete = entries.filter(e => e.state === 'complete');
+
+      const list = document.getElementById('quests-list');
+
+      if (list) {
+          let html = '';
+
+          for (const e of active) {
+              const ready = e.quest.requiredItems.every(item => playerInventory.has(item));
+
+              html += `
+                <div class="quest-entry">
+                  <div class="quest-title">📜 ${e.quest.title || e.quest.questId}</div>
+                  <div class="quest-giver">from ${e.npc.name}</div>
+                  <ul class="quest-objectives">${(e.quest.objectives || []).map(renderQuestObjectiveHTML).join('')}</ul>
+                  ${ready ? `<div class="quest-turnin">➡ Return to ${e.npc.name} to turn in this quest.</div>` : ''}
+                </div>`;
+          }
+
+          for (const e of available) {
+              html += `
+                <div class="quest-entry">
+                  <div class="quest-title">❗ New quest</div>
+                  <div class="quest-giver">${e.npc.name} has a task for you. Look for the ? above their head on the map.</div>
+                </div>`;
+          }
+
+          if (!active.length && !available.length) {
+              html += `<div class="quests-empty">No active quests right now.</div>`;
+          }
+
+          if (complete.length) {
+              html += `
+                <div class="quest-section-title">Completed</div>
+                <ul class="quest-complete-list">
+                  ${complete.map(e => `<li>${e.quest.title || e.quest.questId}</li>`).join('')}
+                </ul>`;
+          }
+
+          list.innerHTML = html;
+      }
+
+      const tracker = document.getElementById('quest-tracker');
+
+      if (tracker) {
+          let text = '';
+
+          if (active.length) {
+              const e = active[0];
+              const ready = e.quest.requiredItems.every(item => playerInventory.has(item));
+
+              if (ready) {
+                  text = `📜 Return to ${e.npc.name}`;
+              } else {
+                  const next = (e.quest.objectives || []).find(o => !getObjectiveStatus(o).done);
+
+                  if (next) {
+                      const st = getObjectiveStatus(next);
+                      text = `📜 ${next.text}${st.showCount ? ` ${st.cur}/${st.max}` : ''}`;
+                  } else {
+                      text = `📜 ${e.quest.title || e.quest.questId}`;
+                  }
+              }
+          } else if (available.length) {
+              text = `❗ New quest: find ${available[0].npc.name}`;
+          }
+
+          tracker.textContent = text;
+          tracker.style.display = text ? 'block' : 'none';
+      }
+  }
+
   function isQuestAccepted(questId) {
       return questState[questId] === 'accepted' || questState[questId] === true;
   }
   
   function acceptQuest(questId) {
       questState[questId] = 'accepted';
+      updateQuestUI();
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
   }
   
@@ -1499,6 +1661,7 @@
   
   function completeQuest(questId) {
       questState[questId] = true;
+      updateQuestUI();
       localStorage.setItem("rpg_quest_state", JSON.stringify(questState));
   }
   
@@ -1962,6 +2125,7 @@
 
   function updateGoldDisplay() {
       document.getElementById('inv-gold-amount').innerText = playerGold;
+      updateQuestUI();
   }
 
   function updateInventoryDisplay() {
@@ -2008,7 +2172,8 @@
       const combatElem = document.getElementById('stat-combat-skill');
       const enduranceElem = document.getElementById('stat-endurance');
       if (combatElem) combatElem.innerText = getEffectiveCombatSkill();
-      if (enduranceElem) enduranceElem.innerText = getEffectiveEndurance();	
+      if (enduranceElem) enduranceElem.innerText = getEffectiveEndurance();
+      updateQuestUI();	
 	
   }
 
@@ -2338,32 +2503,42 @@
       }
   }
   
+  // Which panel is showing: 'explorer' | 'backpack' | 'quests' | null (all closed, buttons visible).
+  function setPanel(which) {
+      const show = (id, on) => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = on ? 'block' : 'none';
+      };
+
+      show('ui-panel', which === 'explorer');
+      show('inventory-panel', which === 'backpack');
+      show('quests-panel', which === 'quests');
+
+      const buttonsVisible = which === null;
+      show('toggle-ui-btn', buttonsVisible);
+      show('inventory-btn', buttonsVisible);
+      show('quests-btn', buttonsVisible);
+  }
+
+  function isPanelOpen(id) {
+      return document.getElementById(id).style.display === 'block';
+  }
+
   function ensureUIPanelVisible() {
-      const uiPanel = document.getElementById('ui-panel');
-      const toggleBtn = document.getElementById('toggle-ui-btn'); 
-      const inventoryBtn = document.getElementById('inventory-btn'); //NEW
-  
-      if (uiPanel.style.display === 'none') {
-          uiPanel.style.display = 'block';
-          toggleBtn.style.display = 'none';
-		  inventoryBtn.style.display = 'none'; //NEW
+      if (document.getElementById('ui-panel').style.display === 'none') {
+          setPanel('explorer');
       }
   }
+
   
+  // Closes the Backpack or Quests panel (name kept from before the Quests panel existed).
+  // restoreButton = false means the caller is about to show the Explorer Panel anyway.
   function closeBackpackIfOpen(restoreButton = true) {
-      const invPanel = document.getElementById('inventory-panel');
-      const invBtn = document.getElementById('inventory-btn');
-  
-      if (invPanel.style.display === 'block') {
-          invPanel.style.display = 'none';
-  
-          if (restoreButton) {
-              invBtn.style.display = 'block';
-          } else {
-              invBtn.style.display = 'none';
-          }
+      if (isPanelOpen('inventory-panel') || isPanelOpen('quests-panel')) {
+          setPanel(restoreButton ? null : 'explorer');
       }
   }
+
   
   function clearSelectedPlot() {
       selectedPlotId = null;
@@ -2504,40 +2679,25 @@
   });
   
   // Toggle Panel Visibility Listeners
-  document.getElementById('close-ui-btn').addEventListener('click', () => {
-      document.getElementById('ui-panel').style.display = 'none';
-      document.getElementById('toggle-ui-btn').style.display = 'block';
-      document.getElementById('inventory-btn').style.display = 'block';
-  
+  function switchPanel(which) {
+      setPanel(which);
       cancelAnyActiveCollection();
       stopLiveDistanceUpdates();
+  }
+
+  document.getElementById('close-ui-btn').addEventListener('click', () => switchPanel(null));
+  document.getElementById('toggle-ui-btn').addEventListener('click', () => switchPanel('explorer'));
+  document.getElementById('inventory-btn').addEventListener('click', () => switchPanel('backpack'));
+  document.getElementById('close-inventory-btn').addEventListener('click', () => switchPanel(null));
+
+  document.getElementById('quests-btn').addEventListener('click', () => {
+      updateQuestUI();
+      switchPanel('quests');
   });
-  
-  document.getElementById('toggle-ui-btn').addEventListener('click', () => {
-      document.getElementById('ui-panel').style.display = 'block';
-      document.getElementById('toggle-ui-btn').style.display = 'none';
-      document.getElementById('inventory-btn').style.display = 'none';
-  
-      cancelAnyActiveCollection();
-      stopLiveDistanceUpdates();
-  });
-  
-  document.getElementById('inventory-btn').addEventListener('click', () => {
-      document.getElementById('inventory-panel').style.display = 'block';
-      document.getElementById('inventory-btn').style.display = 'none';
-      document.getElementById('toggle-ui-btn').style.display = 'none';
-  
-      cancelAnyActiveCollection();
-      stopLiveDistanceUpdates();
-  });
-  
-  document.getElementById('close-inventory-btn').addEventListener('click', () => {
-      document.getElementById('inventory-panel').style.display = 'none';
-      document.getElementById('inventory-btn').style.display = 'block';
-      document.getElementById('toggle-ui-btn').style.display = 'block';
-  
-      cancelAnyActiveCollection();
-      stopLiveDistanceUpdates();
+  document.getElementById('close-quests-btn').addEventListener('click', () => switchPanel(null));
+  document.getElementById('quest-tracker').addEventListener('click', () => {
+      updateQuestUI();
+      switchPanel('quests');
   });
 
 
@@ -2567,9 +2727,7 @@
         gameStarted = true;
         document.getElementById('start-overlay').style.display = 'none';
         
-        document.getElementById('ui-panel').style.display = 'block';
-        document.getElementById('toggle-ui-btn').style.display = 'none';
-		document.getElementById('inventory-btn').style.display = 'none';
+        setPanel('explorer');
         updateGoldDisplay();
         updateInventoryDisplay();    
         playerMarker.setLngLat([userLng, userLat]).addTo(map);
