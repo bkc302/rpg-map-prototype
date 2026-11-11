@@ -493,8 +493,8 @@
       box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
     }
 	
-    /* Bottom-Left Compass Widget */
-    .compass-btn {
+    /* Bottom-Left Grid Toggle */
+    .grid-toggle-btn {
       position: fixed;
       bottom: 24px;
       left: 16px;
@@ -514,38 +514,15 @@
       outline: none;
       transition: border-color 0.2s, transform 0.1s;
     }
-    
-    .compass-btn:active {
+
+    .grid-toggle-btn:active {
       transform: scale(0.92);
     }
-    
-    .compass-btn.active {
-      border-color: #38bdf8; /* Highlighted blue when active tracking is ON */
+
+    /* Blue highlight when the grid is shown */
+    .grid-toggle-btn.active {
+      border-color: #38bdf8;
       box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
-    }
-    
-    .compass-dial {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .compass-n {
-      position: absolute;
-      top: 3px;
-      font-size: 10px;
-      font-weight: 800;
-      color: #ef4444;
-      font-family: monospace;
-      pointer-events: none;
-    }
-    
-    .compass-needle {
-      transition: transform 0.15s ease-out;
-      transform-origin: center center;
     }
 
     #stats-bar {

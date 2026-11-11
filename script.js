@@ -2,9 +2,7 @@
   let userLng = null;
   let gameStarted = false;
   let autoCenterEnabled = true;
-  let compassActive = false;
-  let smoothedHeading = null;
-  let headingFrameQueued = false;
+  let gridVisible = localStorage.getItem('rpg_show_grid') !== 'false';
   let allowLowAccuracyStart = false;
   let gridAreaWarned = false;
 
@@ -485,8 +483,16 @@
     style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
     center: [0, 0],
     zoom: 2,
-	maxZoom: 17.95
+	maxZoom: 17.95,
+    // North is always up: no rotating or tilting. Panning and zooming still work.
+    dragRotate: false,
+    pitchWithRotate: false,
+    touchPitch: false,
+    maxPitch: 0
   });
+
+  map.touchZoomRotate.disableRotation();
+  map.keyboard.disableRotation();
 
   const geolocate = new maplibregl.GeolocateControl({
     positionOptions: { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
@@ -2756,13 +2762,7 @@
         }
         updateAllQuestIndicators();
         if (autoCenterEnabled) {
-          if (compassActive) {
-            map.jumpTo({
-              center: [userLng, userLat],
-              zoom: 17.95
-            });
-          } else {
-            map.easeTo({ 
+          map.easeTo({ 
               center: [userLng, userLat], 
               bearing: 0,
               pitch: 0,
@@ -2770,7 +2770,6 @@
               duration: 500, 
               essential: true 
             });
-          }
         }
       }    
 
@@ -2881,13 +2880,8 @@
     map.on('zoom', updateItemVisibility);
 
     map.on('dragstart', () => {
-      if (autoCenterEnabled || compassActive) {
+      if (autoCenterEnabled) {
         autoCenterEnabled = false;
-        compassActive = false;
-        smoothedHeading = null;
-        if (compassBtn) compassBtn.classList.remove('active');
-        window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
-        window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
         updateAutoCenterUI();
       }
     });
@@ -2911,117 +2905,37 @@
       }
     });
 
-    // --- COMPASS & ORIENTATION LOGIC ---
-    const compassBtn = document.getElementById('compass-btn');
-    const compassNeedle = document.getElementById('compass-needle');
+    // --- GRID SHOW / HIDE ---
+    // Hides the grid lines (unowned and owned). The red outline of a tapped square stays visible,
+    // and squares can still be tapped while the grid is hidden.
+    const GRID_LINE_LAYERS = ['plots-outline', 'plots-claimed-outline'];
+    const gridToggleBtn = document.getElementById('grid-toggle-btn');
 
-    function getScreenOrientationAngle() {
-      if (window.screen && window.screen.orientation && window.screen.orientation.angle !== undefined) {
-        return window.screen.orientation.angle;
-      }
-      return window.orientation || 0;
-    }
-
-    function tiltCompensatedHeading(alpha, beta, gamma) {
-      const rad = Math.PI / 180;
-      const x = (beta || 0) * rad, y = (gamma || 0) * rad, z = (alpha || 0) * rad;
-      const cY = Math.cos(y), cZ = Math.cos(z);
-      const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
-
-      const Vx = -cZ * sY - sZ * sX * cY;
-      const Vy = -sZ * sY + cZ * sX * cY;
-
-      let h = Math.atan(Vx / Vy);
-      if (Vy < 0) h += Math.PI;
-      else if (Vx < 0) h += 2 * Math.PI;
-      return h / rad;
-    }
-
-    function getHeadingDegrees(event) {
-      // iOS already tilt-compensates this value
-      if (event.webkitCompassHeading != null) return event.webkitCompassHeading;
-      // Android: only trust absolute (true north) readings
-      if (event.alpha == null) return null;
-      if (!event.absolute && event.type !== 'deviceorientationabsolute') return null;
-      return tiltCompensatedHeading(event.alpha, event.beta, event.gamma);
-    }
-
-    function smoothAngle(prev, next, k = 0.15) {
-      if (prev === null) return next;
-      const diff = ((next - prev + 540) % 360) - 180; // shortest way around
-      return (prev + diff * k + 360) % 360;
-    }
-
-    function handleDeviceOrientation(event) {
-      if (!compassActive) return;
-      const raw = getHeadingDegrees(event);
-      if (raw === null || isNaN(raw)) return;
-
-      smoothedHeading = smoothAngle(smoothedHeading, raw);
-
-      if (headingFrameQueued) return;
-      headingFrameQueued = true;
-      requestAnimationFrame(() => {
-        headingFrameQueued = false;
-        if (!compassActive || smoothedHeading === null) return;
-        const opts = { bearing: smoothedHeading };
-        if (autoCenterEnabled && userLat && userLng) opts.center = [userLng, userLat];
-        map.jumpTo(opts);
-      });
-    }
-
-
-    function updateCompassUI() {
-      if (!compassNeedle) return;
-      const bearing = map.getBearing();
-      compassNeedle.style.transform = `rotate(${-bearing}deg)`;
-    }
-
-    map.on('rotate', updateCompassUI);
-
-    if (compassBtn) {
-      compassBtn.addEventListener('click', async () => {
-        compassActive = !compassActive;
-        smoothedHeading = null;
-
-        if (compassActive) {
-          autoCenterEnabled = true;
-          updateAutoCenterUI();
-
-          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try {
-              const response = await DeviceOrientationEvent.requestPermission();
-              if (response !== 'granted') {
-                compassActive = false;
-                alert('Device orientation permission denied.');
-                return;
-              }
-            } catch (err) {
-              console.error(err);
-            }
-          }
-
-          compassBtn.classList.add('active');
-
-          if ('ondeviceorientationabsolute' in window) {
-            window.addEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
-          } else {
-            window.addEventListener('deviceorientation', handleDeviceOrientation, true);
-          }
-        } else {
-          compassBtn.classList.remove('active');
-          window.removeEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
-          window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
-
-          map.easeTo({
-            bearing: 0,
-            pitch: 0,
-            duration: 500,
-            essential: true
-          });
+    function applyGridVisibility() {
+      for (const id of GRID_LINE_LAYERS) {
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(id, 'visibility', gridVisible ? 'visible' : 'none');
         }
+      }
+
+      if (gridToggleBtn) gridToggleBtn.classList.toggle('active', gridVisible);
+    }
+
+    if (gridToggleBtn) {
+      gridToggleBtn.addEventListener('click', () => {
+        gridVisible = !gridVisible;
+
+        try {
+          localStorage.setItem('rpg_show_grid', gridVisible ? 'true' : 'false');
+        } catch (err) {}
+
+        applyGridVisibility();
+        showToast(gridVisible ? 'Grid shown' : 'Grid hidden', 1500);
       });
     }
+
+    applyGridVisibility();
+
 
     if (userLat && userLng) {
       refreshMapGrid();
