@@ -21,7 +21,7 @@
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
 
-  <link rel="stylesheet" href="styles.css?v=1.5">
+  <link rel="stylesheet" href="styles.css?v=1.6">
   
 </head>
 <body>
@@ -66,6 +66,7 @@
 <button id="toggle-ui-btn" class="ui-button">Explorer Panel</button>
 <button id="inventory-btn" class="ui-button">Backpack</button>
 <button id="quests-btn" class="ui-button">Quests</button>
+<button id="menu-btn" class="ui-button">Menu</button>
 
 <div id="inventory-panel">
   <button id="close-inventory-btn">&times;</button>
@@ -80,6 +81,24 @@
 
   <h3>Quests</h3>
   <div id="quests-list"></div>
+</div>
+
+<div id="menu-panel">
+  <button id="close-menu-btn" aria-label="Close Menu">&times;</button>
+
+  <h3>Menu</h3>
+
+  <button id="export-save-btn" class="menu-action">💾 Export Save</button>
+  <button id="import-save-btn" class="menu-action">📂 Import Save</button>
+  <div class="menu-note">
+    Your progress is stored only in this browser. Export it now and then so you don't lose it,
+    or to move it to another device.<br/>
+    <span id="last-export-text">Last export: never</span>
+  </div>
+
+  <button id="start-over-btn" class="menu-action danger">Start Over</button>
+
+  <input type="file" id="import-file-input" accept=".json,application/json,text/plain" style="display:none" />
 </div>
 
 <!-- Main Game UI Panel -->
@@ -110,11 +129,6 @@
     transition: width 1s linear;
   "></div>
 </div>
-
-  <!-- Dev Reset Button -->
-  <button id="dev-reset-btn" style="margin-top: 12px; width: 100%; padding: 6px; background: #991b1b; color: #fecaca; border: 1px solid #dc2626; border-radius: 6px; font-size: 11px; cursor: pointer;">
-    ⚠️ Dev: Reset Game Save
-  </button>
 </div>
 
 <div id="map"></div>
@@ -204,7 +218,7 @@
   </div>
 </div>
 
-<script src="script.js?v=2.8"></script>
+<script src="script.js?v=3.0"></script>
 
 </body>
 </html>

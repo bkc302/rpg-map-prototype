@@ -176,6 +176,94 @@
                       readyToTurnIn: "Ha! Now that's a proper adventurer's weapon! A wooden sword isn't much to look at, but every great warrior has to start somewhere.",
                       completed: "Excellent work! You've got yourself a place to craft and a sword to match. Here's 50 gold for your trouble. Keep that sword close—you never know what might be lurking out there!"
                   }
+              },
+              {
+                  questId: "grubwick_forge_quest",
+                  title: "Fire Up the Forge",
+                  objectives: [
+                      { text: "Have an empty plot to build on", flag: () => isBuildingBuilt("forge") || [...claimedPlotIds].some(id => !plotBuildings[id]), hint: () => `Each plot holds one building. Buy another plot for ${PLOT_PRICE} gold.` },
+                      { text: "Gather stone", count: () => getResource("Stone"), max: () => BUILDING_DEFS.forge.costs["Stone"], doneWhen: () => isBuildingBuilt("forge") },
+                      { text: "Gather iron ore", count: () => getResource("Iron Ore"), max: () => BUILDING_DEFS.forge.costs["Iron Ore"], doneWhen: () => isBuildingBuilt("forge") },
+                      { text: "Build a forge", flag: () => isBuildingBuilt("forge"), hint: "Tap a plot you own that has no building, then choose Build." },
+                      { text: "Gather copper ore", count: () => getResource("Copper Ore"), max: () => SMELTING_RECIPES.copperIngot.costs["Copper Ore"], doneWhen: () => getResource("Copper Ingot") >= 1 },
+                      { text: "Smelt a copper ingot", flag: () => getResource("Copper Ingot") >= 1, hint: "Walk up to your forge and tap it." }
+                  ],
+                  requiredItems: [],
+                  requiredBuildings: ["forge"],
+                  requiredResources: { "Copper Ingot": 1 },
+                  rewardGold: 75,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+                  dialog: {
+                      offer: "A workbench is a fine start, but real gear needs metal! Build yourself a forge, then smelt me a copper ingot to prove you can work it. You'll need stone and iron ore for the forge, a spare plot to put it on, and copper ore for the ingot. Up for it?",
+                      inProgress: "Still working on that forge? You'll need a spare plot, plenty of stone and iron ore to build it, and two copper ore to smelt an ingot.",
+                      readyToTurnIn: "A forge, and a copper ingot to show for it! There's nothing like the glow of fresh metal.",
+                      completed: "Fine work! Here's 75 gold for your trouble. Timber Pete has been asking after you, by the way. He's got a job that calls for a sturdy shield."
+                  }
+              }
+          ]
+      },
+
+      timberPeteQuest: {
+          id: "timberPeteQuest",
+          name: "Timber Pete",
+          img: "pete.png",
+          talkRadius: INTERACTION_RADIUS_FEET,
+          spawnRadius: 1,
+          offsetX: 0.75,
+          offsetY: 0.75,
+          disabledKey: "rpg_npc_disabled_pete_quest",
+          appearsAfterQuest: "grubwick_forge_quest",
+          quests: [
+              {
+                  questId: "pete_shield_quest",
+                  title: "A Sturdy Shield",
+                  objectives: [
+                      { text: "Gather wood", count: () => getResource("Wood"), max: () => GEAR_DEFS.woodenShield.costs["Wood"], doneWhen: () => playerInventory.has("wooden shield") },
+                      { text: "Craft a wooden shield", flag: () => playerInventory.has("wooden shield"), hint: () => `Needs ${formatCosts(GEAR_DEFS.woodenShield.costs)}, crafted at your workbench` }
+                  ],
+                  requiredItems: ["wooden shield"],
+                  rewardGold: 60,
+                  rewardItems: [],
+                  disappearOnComplete: true,
+                  dialog: {
+                      offer: "Well, if it isn't the adventurer with my axe! The woods are getting wilder these days. A good wooden shield will keep you in one piece. Craft one at your workbench and I'll make it worth your while. Interested?",
+                      inProgress: "No shield yet? Chop some wood and craft one at your workbench. Twenty pieces ought to do it.",
+                      readyToTurnIn: "Now that's a fine shield! It'll take a knock or two for you.",
+                      completed: "Here's 60 gold for your trouble. Say, Miner Gus was asking about you too. Something about metal, naturally."
+                  }
+              }
+          ]
+      },
+
+      minerGusQuest: {
+          id: "minerGusQuest",
+          name: "Miner Gus",
+          img: "gus.png",
+          talkRadius: INTERACTION_RADIUS_FEET,
+          spawnRadius: 1,
+          offsetX: 0.50,
+          offsetY: 0.80,
+          disabledKey: "rpg_npc_disabled_gus_quest",
+          appearsAfterQuest: "pete_shield_quest",
+          quests: [
+              {
+                  questId: "gus_bronze_quest",
+                  title: "Bronze Work",
+                  objectives: [
+                      { text: "Smelt bronze ingots", count: () => getResource("Bronze Ingot"), max: 2, hint: () => `At your forge. Each needs ${formatCosts(SMELTING_RECIPES.bronzeIngot.costs)}, so smelt copper and tin ore into ingots first.` }
+                  ],
+                  requiredItems: [],
+                  requiredResources: { "Bronze Ingot": 2 },
+                  rewardGold: 100,
+                  rewardItems: [],
+                  disappearOnComplete: true,
+                  dialog: {
+                      offer: "Hey there! How's that mining pick treating you? Now that you've got a forge, show me what it can do. Smelt me two bronze ingots. Copper and tin, mixed just right. Think you can manage that?",
+                      inProgress: "Bronze takes patience. Smelt your copper and tin into ingots first, then combine them at the forge. Two copper ingots and two tin ingots make one bronze.",
+                      readyToTurnIn: "Beautiful! Look at that color. That's proper bronze.",
+                      completed: "Here's 100 gold for your trouble. Bronze won't be the last metal you work with. Keep that sword sharp. Something tells me you'll need it before long."
+                  }
               }
           ]
       }
@@ -1510,6 +1598,21 @@
       }
   }
   
+  function isBuildingBuilt(buildingId) {
+      return Object.values(plotBuildings).includes(buildingId);
+  }
+
+  // A quest can ask for: gear/tools in the backpack (requiredItems), buildings the player
+  // has built (requiredBuildings), and resources to hand over (requiredResources).
+  function isQuestReady(quest) {
+      const hasItems = (quest.requiredItems || []).every(item => playerInventory.has(item));
+      const hasBuildings = (quest.requiredBuildings || []).every(isBuildingBuilt);
+      const hasResources = Object.entries(quest.requiredResources || {})
+          .every(([res, amt]) => getResource(res) >= amt);
+
+      return hasItems && hasBuildings && hasResources;
+  }
+
   function formatCosts(costs) {
       return Object.entries(costs).map(([res, amt]) => `${amt} ${res}`).join(', ');
   }
@@ -1520,13 +1623,14 @@
           return { done, cur: done ? 1 : 0, max: 1, showCount: false };
       }
 
+      const max = typeof obj.max === 'function' ? obj.max() : obj.max;
       const raw = Number(obj.count()) || 0;
-      const done = raw >= obj.max || !!(obj.doneWhen && obj.doneWhen());
+      const done = raw >= max || !!(obj.doneWhen && obj.doneWhen());
 
       return {
           done,
-          cur: done ? obj.max : Math.min(raw, obj.max),
-          max: obj.max,
+          cur: done ? max : Math.min(raw, max),
+          max,
           showCount: true
       };
   }
@@ -1591,14 +1695,14 @@
           let html = '';
 
           for (const e of active) {
-              const ready = e.quest.requiredItems.every(item => playerInventory.has(item));
+              const ready = isQuestReady(e.quest);
 
               html += `
                 <div class="quest-entry">
                   <div class="quest-title">📜 ${e.quest.title || e.quest.questId}</div>
                   <div class="quest-giver">from ${e.npc.name}</div>
                   <ul class="quest-objectives">${(e.quest.objectives || []).map(renderQuestObjectiveHTML).join('')}</ul>
-                  ${ready ? `<div class="quest-turnin">➡ Return to ${e.npc.name} to turn in this quest.</div>` : ''}
+                  ${ready ? `<div class="quest-turnin">➡ Return to ${e.npc.name} to turn in this quest.${e.quest.requiredResources ? ` (you will hand over ${formatCosts(e.quest.requiredResources)})` : ''}</div>` : ''}
                 </div>`;
           }
 
@@ -1632,7 +1736,7 @@
 
           if (active.length) {
               const e = active[0];
-              const ready = e.quest.requiredItems.every(item => playerInventory.has(item));
+              const ready = isQuestReady(e.quest);
 
               if (ready) {
                   text = `📜 Return to ${e.npc.name}`;
@@ -1693,8 +1797,7 @@
   
       if (!isQuestAccepted(nextQuest.questId)) return 'available';
   
-      const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
-      return hasAllItems ? 'ready' : 'in-progress';
+      return isQuestReady(nextQuest) ? 'ready' : 'in-progress';
   }
   
   function updateQuestIndicator(def) {
@@ -1787,7 +1890,7 @@
               return;
           }
   
-          const hasAllItems = nextQuest.requiredItems.every(item => playerInventory.has(item));
+          const hasAllItems = isQuestReady(nextQuest);
   
           if (!hasAllItems) {
               container.innerHTML = `
@@ -1800,10 +1903,18 @@
           container.innerHTML = `
               <b>${def.name}:</b><br/>
               <i>${dialog.readyToTurnIn}</i><br/>
+              ${nextQuest.requiredResources ? `<small>Hand over: ${formatCosts(nextQuest.requiredResources)}</small><br/>` : ''}
               <button id="quest-turnin-btn" class="btn buy-btn" style="margin-top:6px;">Turn In Quest</button>
           `;
   
           document.getElementById('quest-turnin-btn').addEventListener('click', () => {
+              if (isQuestComplete(nextQuest.questId) || !isQuestReady(nextQuest)) return;
+
+              // Hand over any required resources.
+              for (const [res, amt] of Object.entries(nextQuest.requiredResources || {})) {
+                  addResource(res, -amt);
+              }
+
               playerGold += nextQuest.rewardGold;
               updateGoldDisplay();
               localStorage.setItem("rpg_player_gold", playerGold);
@@ -2523,11 +2634,14 @@
       show('ui-panel', which === 'explorer');
       show('inventory-panel', which === 'backpack');
       show('quests-panel', which === 'quests');
+      show('menu-panel', which === 'menu');
+      if (which !== 'menu') disarmStartOver();
 
       const buttonsVisible = which === null;
       show('toggle-ui-btn', buttonsVisible);
       show('inventory-btn', buttonsVisible);
       show('quests-btn', buttonsVisible);
+      show('menu-btn', buttonsVisible);
   }
 
   function isPanelOpen(id) {
@@ -2544,7 +2658,7 @@
   // Closes the Backpack or Quests panel (name kept from before the Quests panel existed).
   // restoreButton = false means the caller is about to show the Explorer Panel anyway.
   function closeBackpackIfOpen(restoreButton = true) {
-      if (isPanelOpen('inventory-panel') || isPanelOpen('quests-panel')) {
+      if (isPanelOpen('inventory-panel') || isPanelOpen('quests-panel') || isPanelOpen('menu-panel')) {
           setPanel(restoreButton ? null : 'explorer');
       }
   }
@@ -2556,94 +2670,191 @@
   }
 
   // UI & GEOLOCATION EVENT LISTENERS
-  if (!new URLSearchParams(window.location.search).has('dev')) {
-      document.getElementById('dev-reset-btn').style.display = 'none';
+  // ===== MENU: EXPORT / IMPORT / START OVER =====
+  // Everything the game saves lives in localStorage under keys that start with "rpg_".
+  const SAVE_PREFIX = 'rpg_';
+  const LAST_EXPORT_KEY = 'rpg_last_export';
+  const NEVER_EXPORTED_KEYS = [LAST_EXPORT_KEY];
+
+  function getGameStorageKeys() {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(SAVE_PREFIX)) keys.push(k);
+      }
+      return keys;
   }
 
-  document.getElementById('dev-reset-btn').addEventListener('click', () => {
-      if (confirm("Reset all gold, inventory, resources, buildings, and wipe owned plots?")) {
-  
-          localStorage.removeItem('rpg_player_gold');
-          localStorage.removeItem('rpg_claimed_plots');
-          localStorage.removeItem('rpg_player_inventory');
-		  localStorage.removeItem('rpg_buildings');
-          localStorage.removeItem(COLLECTED_STORAGE_KEY);
-          collectedItems = {};
-          for (const pid in buildingNodes) {
-              buildingNodes[pid]?.marker?.remove();
-              delete buildingNodes[pid];
-          }
-          
-          localStorage.removeItem("rpg_quest_state");
-		  localStorage.removeItem(LNG_GRID_SIZE_STORAGE_KEY);
-          questState = {};
-          
-          playerGold = 0;
-          claimedPlotIds.clear();
-          playerInventory.clear();
-          selectedPlotId = null;
-		  
-          for (const plotId in plotBuildings) {
-            delete plotBuildings[plotId];
-          }
-          
-          for (const key of Object.keys(localStorage)) {
-              if (
-                  key.startsWith('rpg_item_') ||
-                  key.startsWith('rpg_resource_')
-              ) {
-                  localStorage.removeItem(key);
-              }
-          }
-          
-          updateGoldDisplay();
-          updateInventoryDisplay();
-          renderSelectedPlotCard();
-          refreshMapGrid();
-          
-          currentGridCenterKey = null;
-          spawnItems();
-  
-          // Reset merchant NPCs
-          for (const key in NPC_DEFS) {
-              const def = NPC_DEFS[key];
-              localStorage.removeItem(def.disabledKey);
-  
-              if (npcNodes[def.id]?.marker) {
-                  npcNodes[def.id].marker.remove();
-              }
-              npcNodes[def.id] = null;
-          }
-  
-          // Reset & respawn quest NPCs
-          for (const key in QUEST_NPC_DEFS) {
-              const def = QUEST_NPC_DEFS[key];
-          
-              if (def.disabledKey) {
-                  localStorage.removeItem(def.disabledKey);
-              }
-          
-              if (npcNodes[def.id]?.marker) {
-                  npcNodes[def.id].marker.remove();
-              }
-          
-              if (npcNodes[def.id]?.indicatorMarker) {
-                  npcNodes[def.id].indicatorMarker.remove();
-              }
-          
-              npcNodes[def.id] = null;
-          }
-  
-          // Respawn everyone
-          for (const key in NPC_DEFS) {
-              spawnNPC(NPC_DEFS[key]);
-          }
-          for (const key in QUEST_NPC_DEFS) {
-              spawnNPC(QUEST_NPC_DEFS[key]);
-          }
-  
-          alert("Save data cleared!");
+  function readGameStorage() {
+      const data = {};
+      for (const k of getGameStorageKeys()) data[k] = localStorage.getItem(k);
+      return data;
+  }
+
+  function clearGameStorage(keep = []) {
+      for (const k of getGameStorageKeys()) {
+          if (!keep.includes(k)) localStorage.removeItem(k);
       }
+  }
+
+  function collectSave() {
+      const data = readGameStorage();
+      for (const k of NEVER_EXPORTED_KEYS) delete data[k];
+
+      return {
+          game: 'wayfarer',
+          saveVersion: 1,
+          exportedAt: new Date().toISOString(),
+          data
+      };
+  }
+
+  function updateLastExportText() {
+      const el = document.getElementById('last-export-text');
+      if (!el) return;
+
+      const iso = localStorage.getItem(LAST_EXPORT_KEY);
+      const d = iso ? new Date(iso) : null;
+
+      el.textContent = (d && !isNaN(d))
+          ? `Last export: ${d.toLocaleString()}`
+          : 'Last export: never';
+  }
+
+  async function exportSave() {
+      const json = JSON.stringify(collectSave(), null, 2);
+      const filename = `wayfarer-save-${new Date().toISOString().slice(0, 10)}.json`;
+
+      // Phones: the share sheet lets you save to Files / Drive or send it to yourself.
+      try {
+          if (typeof File === 'function' && navigator.canShare) {
+              const file = new File([json], filename, { type: 'application/json' });
+
+              if (navigator.canShare({ files: [file] })) {
+                  await navigator.share({ files: [file], title: 'Wayfarer save' });
+                  localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString());
+                  updateLastExportText();
+                  showToast('Save exported', 3000);
+                  return;
+              }
+          }
+      } catch (err) {
+          if (err && err.name === 'AbortError') return; // player closed the share sheet
+          // anything else: fall through to a normal download
+      }
+
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+      localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString());
+      updateLastExportText();
+      showToast('Save downloaded', 3000);
+  }
+
+  function isValidSave(obj) {
+      if (!obj || typeof obj !== 'object' || obj.game !== 'wayfarer') return false;
+
+      const d = obj.data;
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
+
+      const entries = Object.entries(d);
+      if (entries.length === 0 || entries.length > 5000) return false;
+
+      return entries.every(([k, v]) =>
+          k.startsWith(SAVE_PREFIX) && k.length <= 200 &&
+          typeof v === 'string' && v.length <= 2000000
+      );
+  }
+
+  async function importSaveFromFile(file) {
+      let obj;
+
+      try {
+          obj = JSON.parse(await file.text());
+      } catch (err) {
+          showToast('That file is not a valid save.', 4000);
+          return;
+      }
+
+      if (!isValidSave(obj)) {
+          showToast('That file is not a Wayfarer save.', 4000);
+          return;
+      }
+
+      const d = obj.exportedAt ? new Date(obj.exportedAt) : null;
+      const when = (d && !isNaN(d)) ? d.toLocaleString() : 'unknown date';
+      const gold = obj.data['rpg_player_gold'] || '0';
+
+      if (!confirm(`Replace your current progress with this save?\n\nSaved: ${when}\nGold: ${gold}\n\nThis cannot be undone.`)) {
+          return;
+      }
+
+      const backup = readGameStorage();
+
+      try {
+          clearGameStorage(NEVER_EXPORTED_KEYS);
+          for (const [k, v] of Object.entries(obj.data)) {
+              if (NEVER_EXPORTED_KEYS.includes(k)) continue;
+              localStorage.setItem(k, v);
+          }
+      } catch (err) {
+          // Something went wrong part-way (e.g. storage full): put the old progress back.
+          clearGameStorage();
+          for (const [k, v] of Object.entries(backup)) localStorage.setItem(k, v);
+          showToast('Import failed. Your progress was not changed.', 5000);
+          return;
+      }
+
+      window.location.reload();
+  }
+
+  let startOverArmed = false;
+  let startOverTimer = null;
+
+  function disarmStartOver() {
+      startOverArmed = false;
+      clearTimeout(startOverTimer);
+      startOverTimer = null;
+
+      const btn = document.getElementById('start-over-btn');
+      if (btn) {
+          btn.textContent = 'Start Over';
+          btn.classList.remove('armed');
+      }
+  }
+
+  document.getElementById('export-save-btn').addEventListener('click', exportSave);
+
+  document.getElementById('import-save-btn').addEventListener('click', () => {
+      document.getElementById('import-file-input').click();
+  });
+
+  document.getElementById('import-file-input').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (file) importSaveFromFile(file);
+  });
+
+  // Two taps: the first arms the button, the second (within 5 seconds) erases everything.
+  document.getElementById('start-over-btn').addEventListener('click', () => {
+      const btn = document.getElementById('start-over-btn');
+
+      if (!startOverArmed) {
+          startOverArmed = true;
+          btn.textContent = 'Tap again to erase EVERYTHING';
+          btn.classList.add('armed');
+          startOverTimer = setTimeout(disarmStartOver, 5000);
+          return;
+      }
+
+      clearGameStorage([LAST_EXPORT_KEY, 'rpg_show_grid']);
+      window.location.reload();
   });
 
   document.getElementById('start-btn').addEventListener('click', () => {
@@ -2705,6 +2916,12 @@
       switchPanel('quests');
   });
   document.getElementById('close-quests-btn').addEventListener('click', () => switchPanel(null));
+
+  document.getElementById('menu-btn').addEventListener('click', () => {
+      updateLastExportText();
+      switchPanel('menu');
+  });
+  document.getElementById('close-menu-btn').addEventListener('click', () => switchPanel(null));
   document.getElementById('quest-tracker').addEventListener('click', () => {
       updateQuestUI();
       switchPanel('quests');
