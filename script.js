@@ -1049,7 +1049,8 @@
       updateItemVisibility();
 
       // The grid was rebuilt, so re-attach any open item/building card to the fresh node.
-      if (priorTarget && priorTarget === activeTarget) {
+      if (priorTarget && priorTarget === activeTarget &&
+          (priorTarget.type === 'item' || priorTarget.type === 'building')) {
           let rebound = false;
 
           if (priorTarget.type === 'item') {
@@ -1155,10 +1156,7 @@
   
       updateInventoryDisplay();
   
-      // Trigger the item popup above the player's head
-      showItemPopup(yieldAmount, def.resourceName);
-      
-      showToast(`Collected +${yieldAmount} ${def.resourceName}!`, 4500);
+      showGainToast(yieldAmount, def.resourceName);
   
       stopLiveDistanceUpdates();
   
@@ -1921,13 +1919,13 @@
               
               // Popup for Gold Reward
               if (nextQuest.rewardGold > 0) {
-                  showFloatingPopup(`+${nextQuest.rewardGold} Gold`, false);
+                  showGainToast(nextQuest.rewardGold, 'Gold', 5000);
               }
           
               // Popup(s) for Item Rewards
               for (const item of nextQuest.rewardItems) {
                   playerInventory.add(item);
-                  showFloatingPopup(`+1 ${item}`, true);
+                  showGainToast(1, item, 5000);
               }
               
               localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
@@ -1959,58 +1957,641 @@
       });
   }
   
-  let toastTimer = null;
+  // =====================================================================
+  // COMBAT: roaming monsters and turn-based fights on the map
+  // =====================================================================
 
-  function showToast(message, ms = 4000) {
-    let el = document.getElementById('game-toast');
+  // To swap the colored square for a picture later, set `image` (e.g. 'monster.png').
+  const MONSTER_DEFS = {
+    wanderer: {
+      id: 'wanderer',
+      name: 'Monster',            // placeholder name
+      color: '#b91c1c',
+      borderColor: '#450a0a',
+      image: '',
+      size: 40,
 
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'game-toast';
-      el.className = 'game-toast'; // styled in styles.css
-      document.body.appendChild(el);
+      combatSkill: 9,
+      endurance: 28,
+      goldMin: 5,
+      goldMax: 12,
+
+      speedFeetPerSec: 2.5,
+      wanderMinFeet: 30,
+      wanderMaxFeet: 120,
+      idleMinMs: 3000,
+      idleMaxMs: 9000
     }
+  };
 
-    el.textContent = message;
-    el.style.opacity = '1';
+  // All the numbers you will want to tune live here.
+  const COMBAT = {
+    roundMs: 2500,                           // time between fight rounds
+    firstRoundMs: 800,                       // delay before the first round
+    fightRangeFeet: INTERACTION_RADIUS_FEET, // how close you must be to START a fight
+    escapeFeet: 200,                         // get this far away to end a fight
+    missChance: 0.10,
+    maxDamage: 8,
+    defeatGoldLossPct: 0.10,                 // gold lost when knocked out
+    defeatHpPct: 0.5,                        // HP you wake up with after being knocked out
+    hpRegenMs: 10000,                        // 1 HP back every this many ms (not while fighting)
 
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
+    maxMonsters: 3,
+    spawnMinFeet: 250,
+    spawnMaxFeet: 600,
+    despawnFeet: 1000,
+    spawnCheckMs: 8000,
+    moveTickMs: 100
+  };
+
+  const FEET_TO_M = 1 / 3.28084;
+
+  function randRange(a, b) { return a + Math.random() * (b - a); }
+  function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+
+  // ---------- player HP ----------
+  let playerHP = null;   // null until first used (loaded from the save)
+  let hpClockMs = 0;     // when the next regen point started counting
+
+  function getMaxHP() {
+    return getEffectiveEndurance();
   }
 
-  function showFloatingPopup(textString, isItem = false) {
-    if (!userLat || !userLng) return;
-  
+  function savePlayerHP() {
+    localStorage.setItem('rpg_player_hp', String(playerHP));
+    localStorage.setItem('rpg_hp_time', String(hpClockMs));
+  }
+
+  function loadPlayerHP() {
+    const max = getMaxHP();
+    const now = Date.now();
+    const savedHP = localStorage.getItem('rpg_player_hp');
+
+    if (savedHP === null) {
+      playerHP = max;
+      hpClockMs = now;
+      return;
+    }
+
+    const parsed = Number(savedHP);
+    let hp = Math.max(0, Math.min(Number.isFinite(parsed) ? parsed : max, max));
+    let clock = Number(localStorage.getItem('rpg_hp_time')) || now;
+
+    // Heal for the time the game was closed.
+    const gained = Math.floor((now - clock) / COMBAT.hpRegenMs);
+    if (gained > 0 && hp < max) {
+      hp = Math.min(max, hp + gained);
+      clock += gained * COMBAT.hpRegenMs;
+    }
+    if (hp >= max) clock = now;
+
+    playerHP = hp;
+    hpClockMs = clock;
+    savePlayerHP();
+  }
+
+  function getHP() {
+    if (playerHP === null) loadPlayerHP();
+    return playerHP;
+  }
+
+  function setPlayerHP(value) {
+    playerHP = Math.max(0, Math.min(Math.round(value), getMaxHP()));
+    hpClockMs = Date.now();
+    savePlayerHP();
+    updateHPDisplay();
+  }
+
+  function updateHPDisplay() {
+    const el = document.getElementById('stat-endurance');
+    if (el) el.innerText = `${getHP()}/${getMaxHP()}`;
+  }
+
+  function regenTick() {
+    if (activeFight) return;
+
+    const max = getMaxHP();
+    const hp = getHP();
+
+    if (hp >= max) {
+      hpClockMs = Date.now();
+      return;
+    }
+
+    const gained = Math.floor((Date.now() - hpClockMs) / COMBAT.hpRegenMs);
+    if (gained > 0) {
+      playerHP = Math.min(max, hp + gained);
+      hpClockMs += gained * COMBAT.hpRegenMs;
+      if (playerHP >= max) hpClockMs = Date.now();
+      savePlayerHP();
+      updateHPDisplay();
+    }
+  }
+
+  // ---------- damage ----------
+  // Every 2 points of skill advantage is worth +1 damage. Hits do at least 1.
+  function rollDamage(attackSkill, defendSkill) {
+    if (Math.random() < COMBAT.missChance) return 0;
+
+    const base = 1 + Math.floor(Math.random() * 3);      // 1-3
+    const bonus = (attackSkill - defendSkill) * 0.5;
+
+    return Math.min(COMBAT.maxDamage, Math.max(1, Math.round(base + bonus)));
+  }
+
+  // Floating text on the map at any position (damage numbers).
+  function showFloatingPopupAt(lat, lng, text, extraClass = '', offsetY = -30) {
     const wrapper = document.createElement('div');
     wrapper.style.pointerEvents = 'none';
-  
-    const textElem = document.createElement('div');
-    textElem.className = isItem 
-      ? 'floating-popup-text item-popup' 
-      : 'floating-popup-text';
-    textElem.innerText = textString;
-    wrapper.appendChild(textElem);
-  
+
+    const el = document.createElement('div');
+    el.className = 'floating-popup-text' + (extraClass ? ' ' + extraClass : '');
+    el.innerText = text;
+    wrapper.appendChild(el);
+
     const popupMarker = new maplibregl.Marker({
       element: wrapper,
       anchor: 'bottom',
-      offset: [0, -40] // Nudges above the player icon
+      offset: [0, offsetY]
     })
-      .setLngLat([userLng, userLat])
+      .setLngLat([lng, lat])
       .addTo(map);
-  
+
     setTimeout(() => popupMarker.remove(), 1200);
   }
-  
-  // Wrapper for backward compatibility with existing gold calls
-  function showGoldPopup(amount) {
-    showFloatingPopup(`+${amount} Gold`, false);
+
+  // ---------- monsters on the map ----------
+  let monsterNodes = [];
+  let monsterMoveInterval = null;
+  let monsterSpawnInterval = null;
+  let lastMoveTick = 0;
+  let combatInitialized = false;
+
+  function createMonsterElement(def) {
+    const container = document.createElement('div');
+    container.className = 'monster-marker-container';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'monster-wrap';
+
+    const hpBar = document.createElement('div');
+    hpBar.className = 'monster-hp';
+    const hpFill = document.createElement('div');
+    hpBar.appendChild(hpFill);
+
+    let body;
+    if (def.image) {
+      body = document.createElement('img');
+      body.src = def.image;
+      body.className = 'monster-img';
+    } else {
+      body = document.createElement('div');
+      body.className = 'monster-body';
+      body.style.background = def.color;
+      body.style.borderColor = def.borderColor;
+    }
+    body.style.width = `${def.size}px`;
+    body.style.height = `${def.size}px`;
+
+    wrap.appendChild(hpBar);
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+
+    return { container, hpBar, hpFill };
   }
-  
-  // Dedicated helper for item popups
-  function showItemPopup(amount, itemName) {
-    showFloatingPopup(`+${amount} ${itemName}`, true);
+
+  function updateMonsterHpBar(node) {
+    const show = node.engaged || node.hp < node.def.endurance;
+    node.hpBar.classList.toggle('show', show);
+    node.hpFill.style.width = `${Math.max(0, (node.hp / node.def.endurance) * 100)}%`;
   }
+
+  function spawnMonster(def = MONSTER_DEFS.wanderer) {
+    if (!userLat || !userLng) return null;
+
+    const p = projectLatLng(userLat, userLng);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randRange(COMBAT.spawnMinFeet, COMBAT.spawnMaxFeet) * FEET_TO_M;
+    const x = p.x + Math.cos(angle) * dist;
+    const y = p.y + Math.sin(angle) * dist;
+    const ll = unprojectXY(x, y);
+
+    const parts = createMonsterElement(def);
+
+    const marker = new maplibregl.Marker({ element: parts.container, anchor: 'center' })
+      .setLngLat([ll.lng, ll.lat])
+      .addTo(map);
+
+    const node = {
+      id: `monster_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      def,
+      x, y,
+      lat: ll.lat,
+      lng: ll.lng,
+      hp: def.endurance,
+      state: 'idle',
+      idleUntil: Date.now() + randRange(def.idleMinMs, def.idleMaxMs),
+      target: null,
+      engaged: false,
+      marker,
+      element: parts.container,
+      hpBar: parts.hpBar,
+      hpFill: parts.hpFill
+    };
+
+    updateMonsterHpBar(node);
+    monsterNodes.push(node);
+
+    parts.container.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelAnyActiveCollection();
+      clearSelectedPlot();
+      closeBackpackIfOpen(false);
+      ensureUIPanelVisible();
+      renderMonsterCard(node);
+    });
+
+    return node;
+  }
+
+  function removeMonster(node) {
+    node.marker.remove();
+
+    const idx = monsterNodes.indexOf(node);
+    if (idx !== -1) monsterNodes.splice(idx, 1);
+
+    if (activeTarget && activeTarget.node === node) {
+      stopLiveDistanceUpdates();
+      renderSelectedPlotCard();
+    }
+  }
+
+  // Monsters wander: walk smoothly to a nearby spot, stand still for a while, repeat.
+  function moveMonsters() {
+    const now = Date.now();
+    const dt = Math.min(0.5, (now - (lastMoveTick || now)) / 1000);
+    lastMoveTick = now;
+
+    for (let i = monsterNodes.length - 1; i >= 0; i--) {
+      const node = monsterNodes[i];
+
+      // Far from the player: remove it (a new one will spawn nearby).
+      if (userLat && userLng && !node.engaged &&
+          getDistanceFeet(userLat, userLng, node.lat, node.lng) > COMBAT.despawnFeet) {
+        removeMonster(node);
+        continue;
+      }
+
+      if (node.engaged) continue; // fighting: stand still
+
+      const def = node.def;
+
+      if (node.state === 'idle') {
+        if (now >= node.idleUntil) {
+          const angle = Math.random() * Math.PI * 2;
+          const d = randRange(def.wanderMinFeet, def.wanderMaxFeet) * FEET_TO_M;
+          node.target = { x: node.x + Math.cos(angle) * d, y: node.y + Math.sin(angle) * d };
+          node.state = 'walking';
+        }
+        continue;
+      }
+
+      const dx = node.target.x - node.x;
+      const dy = node.target.y - node.y;
+      const dist = Math.hypot(dx, dy);
+      const step = def.speedFeetPerSec * FEET_TO_M * dt;
+
+      if (dist <= step) {
+        node.x = node.target.x;
+        node.y = node.target.y;
+        node.state = 'idle';
+        node.idleUntil = now + randRange(def.idleMinMs, def.idleMaxMs);
+      } else {
+        node.x += (dx / dist) * step;
+        node.y += (dy / dist) * step;
+      }
+
+      const ll = unprojectXY(node.x, node.y);
+      node.lat = ll.lat;
+      node.lng = ll.lng;
+      node.marker.setLngLat([ll.lng, ll.lat]);
+    }
+  }
+
+  function renderMonsterCard(node) {
+    if (activeFight) {
+      if (activeFight.node === node) {
+        stopLiveDistanceUpdates();
+        renderFightCard(true);
+      } else {
+        showToast('Finish your current fight first!', 2500, 'fight-busy');
+      }
+      return;
+    }
+
+    const container = document.getElementById('plot-info');
+
+    startLiveDistanceUpdates('monster', node, dist => {
+      const def = node.def;
+      const inRange = Number(dist) <= COMBAT.fightRangeFeet;
+      const stats = `<small>Combat Skill ${def.combatSkill} · Endurance ${node.hp}/${def.endurance}</small><br/>`;
+
+      if (!inRange) {
+        container.innerHTML = `
+          <b>${def.name}</b><br/>
+          ${stats}
+          <b>Distance:</b> ${dist} ft away<br/>
+          <small style="color:#f7f7f7;">Walk within ${COMBAT.fightRangeFeet} ft to fight.</small>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <b>${def.name}</b><br/>
+        ${stats}
+        <b>✅ In range</b><br/>
+        <button id="fight-btn" class="btn buy-btn" style="margin-top:6px;">⚔️ Fight</button>
+      `;
+
+      document.getElementById('fight-btn').addEventListener('click', () => startFight(node));
+    });
+  }
+
+  // ---------- fights ----------
+  let activeFight = null;   // { node, round, log, nextRoundAt, cardNode }
+  let fightInterval = null;
+
+  function startFight(node) {
+    if (activeFight || !monsterNodes.includes(node)) return;
+    if (getHP() <= 0) return;
+
+    if (userLat && userLng &&
+        getDistanceFeet(userLat, userLng, node.lat, node.lng) > COMBAT.fightRangeFeet) {
+      return;
+    }
+
+    stopLiveDistanceUpdates();
+    cancelAnyActiveCollection();
+
+    node.engaged = true;
+    node.element.classList.add('engaged');
+    updateMonsterHpBar(node);
+
+    activeFight = {
+      node,
+      round: 0,
+      log: ['The fight begins!'],
+      nextRoundAt: Date.now() + COMBAT.firstRoundMs,
+      cardNode: null
+    };
+
+    fightInterval = setInterval(fightTick, 250);
+    renderFightCard(true);
+  }
+
+  function fightTick() {
+    const f = activeFight;
+    if (!f) return;
+
+    // Running away: get far enough from the monster and the fight ends.
+    if (userLat && userLng) {
+      const d = getDistanceFeet(userLat, userLng, f.node.lat, f.node.lng);
+      if (d > COMBAT.escapeFeet) {
+        endFight('escaped');
+        return;
+      }
+    }
+
+    const now = Date.now();
+
+    // If the phone was asleep, don't replay the rounds it missed.
+    if (now - f.nextRoundAt > COMBAT.roundMs * 2) f.nextRoundAt = now;
+
+    if (now >= f.nextRoundAt) {
+      resolveFightRound();
+      if (!activeFight) return;
+      f.nextRoundAt += COMBAT.roundMs;
+    }
+
+    renderFightCard(false);
+  }
+
+  function resolveFightRound() {
+    const f = activeFight;
+    const node = f.node;
+    const def = node.def;
+
+    f.round++;
+
+    // You swing first.
+    const dealt = rollDamage(getEffectiveCombatSkill(), def.combatSkill);
+    node.hp = Math.max(0, node.hp - dealt);
+    updateMonsterHpBar(node);
+
+    if (dealt > 0) {
+      showFloatingPopupAt(node.lat, node.lng, `-${dealt}`, 'dmg-dealt');
+      f.log.push(`You hit the ${def.name} for ${dealt}.`);
+    } else {
+      showFloatingPopupAt(node.lat, node.lng, 'Miss', 'dmg-miss');
+      f.log.push('You miss!');
+    }
+
+    if (node.hp <= 0) {
+      endFight('victory');
+      return;
+    }
+
+    // Then it swings back.
+    const taken = rollDamage(def.combatSkill, getEffectiveCombatSkill());
+
+    if (taken > 0) {
+      playerHP = Math.max(0, getHP() - taken);
+      savePlayerHP();
+      updateHPDisplay();
+      showFloatingPopupAt(userLat, userLng, `-${taken}`, 'dmg-taken', -40);
+      f.log.push(`The ${def.name} hits you for ${taken}.`);
+    } else {
+      f.log.push(`The ${def.name} misses!`);
+    }
+
+    if (f.log.length > 4) f.log.splice(0, f.log.length - 4);
+
+    if (getHP() <= 0) endFight('defeat');
+  }
+
+  function renderFightCard(force = false) {
+    const f = activeFight;
+    if (!f) return;
+
+    const box = document.getElementById('plot-info');
+
+    // Don't overwrite a different card the player has opened since.
+    if (!force && f.cardNode && box.firstChild !== f.cardNode) return;
+
+    const def = f.node.def;
+    const hp = getHP();
+    const maxHp = getMaxHP();
+    const hpPct = Math.max(0, (hp / maxHp) * 100);
+    const foePct = Math.max(0, (f.node.hp / def.endurance) * 100);
+    const secs = Math.max(0, Math.ceil((f.nextRoundAt - Date.now()) / 1000));
+    const dist = (userLat && userLng)
+      ? Math.round(getDistanceFeet(userLat, userLng, f.node.lat, f.node.lng))
+      : 0;
+
+    box.innerHTML = `
+      <b>⚔️ Fighting the ${def.name}</b><br/>
+      <div class="fight-row"><span>You</span><span>${hp}/${maxHp}</span></div>
+      <div class="fight-bar"><div class="fight-bar-fill you" style="width:${hpPct}%"></div></div>
+      <div class="fight-row"><span>${def.name}</span><span>${f.node.hp}/${def.endurance}</span></div>
+      <div class="fight-bar"><div class="fight-bar-fill foe" style="width:${foePct}%"></div></div>
+      <div class="fight-log">${f.log.join('<br/>')}</div>
+      <div class="fight-run">Next round in ${secs}s. To run away, walk until you are ${COMBAT.escapeFeet} ft from it (now ${dist} ft).</div>
+    `;
+
+    f.cardNode = box.firstChild;
+  }
+
+  function showFightResult(f, title, text) {
+    const box = document.getElementById('plot-info');
+    if (f.cardNode && box.firstChild !== f.cardNode) return; // player is looking at something else
+    box.innerHTML = `<b>${title}</b><br/>${text}`;
+  }
+
+  function endFight(result) {
+    const f = activeFight;
+    if (!f) return;
+
+    clearInterval(fightInterval);
+    fightInterval = null;
+    activeFight = null;
+
+    const node = f.node;
+    const def = node.def;
+
+    node.engaged = false;
+    node.element.classList.remove('engaged');
+
+    if (result === 'victory') {
+      const gold = randInt(def.goldMin, def.goldMax);
+
+      playerGold += gold;
+      localStorage.setItem('rpg_player_gold', playerGold);
+      updateGoldDisplay();
+
+      setPlayerHP(getHP());   // restarts the healing clock
+      removeMonster(node);
+
+      const sound = coinAudio.cloneNode();
+      sound.volume = 0.6;
+      sound.play().catch(() => {});
+
+      showToast(`Victory! You found ${gold} gold.`, 4000);
+      showFightResult(f, '🏆 Victory!', `You defeated the ${def.name} and found ${gold} gold.`);
+      return;
+    }
+
+    // The monster recovers if you leave or beat you.
+    node.hp = def.endurance;
+    updateMonsterHpBar(node);
+
+    if (result === 'defeat') {
+      const lost = Math.floor(playerGold * COMBAT.defeatGoldLossPct);
+
+      playerGold -= lost;
+      localStorage.setItem('rpg_player_gold', playerGold);
+      updateGoldDisplay();
+
+      setPlayerHP(Math.max(1, Math.ceil(getMaxHP() * COMBAT.defeatHpPct)));
+
+      showToast(`You were knocked out! You lost ${lost} gold.`, 5000);
+      showFightResult(f, '💫 Knocked out', `The ${def.name} beat you. You lost ${lost} gold and wake up weak.`);
+      return;
+    }
+
+    // escaped
+    setPlayerHP(getHP());
+    showToast('You got away!', 3000);
+    showFightResult(f, '🏃 You got away', `The ${def.name} loses interest and wanders off.`);
+  }
+
+  function initCombat() {
+    if (combatInitialized) return;
+    combatInitialized = true;
+
+    updateHPDisplay();
+
+    for (let i = 0; i < 2; i++) spawnMonster();
+
+    monsterMoveInterval = setInterval(moveMonsters, COMBAT.moveTickMs);
+    monsterSpawnInterval = setInterval(() => {
+      if (monsterNodes.length < COMBAT.maxMonsters) spawnMonster();
+    }, COMBAT.spawnCheckMs);
+
+    setInterval(regenTick, 1000);
+  }
+
+  // ---------- Messages at the bottom of the screen ----------
+  // They stack (newest at the bottom), so several can show at once without overlapping.
+  const MAX_TOASTS = 4;
+  let toastStack = null;
+  let activeToasts = [];   // { el, key, timer, total }
+
+  function getToastStack() {
+    if (!toastStack) {
+      toastStack = document.createElement('div');
+      toastStack.id = 'toast-stack';
+      document.body.appendChild(toastStack);
+    }
+    return toastStack;
+  }
+
+  function removeToast(rec) {
+    clearTimeout(rec.timer);
+
+    const i = activeToasts.indexOf(rec);
+    if (i !== -1) activeToasts.splice(i, 1);
+
+    rec.el.style.opacity = '0';
+    setTimeout(() => rec.el.remove(), 250);
+  }
+
+  // `key` (optional): a message with the same key replaces the one already showing
+  // instead of adding another line.
+  function showToast(message, ms = 4000, key = null) {
+    let rec = key ? activeToasts.find(t => t.key === key) : null;
+
+    if (rec) {
+      rec.el.textContent = message;
+      rec.el.style.opacity = '1';
+      clearTimeout(rec.timer);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'game-toast'; // styled in styles.css
+      el.textContent = message;
+      getToastStack().appendChild(el);
+
+      rec = { el, key, timer: null, total: 0 };
+      activeToasts.push(rec);
+
+      while (activeToasts.length > MAX_TOASTS) removeToast(activeToasts[0]);
+    }
+
+    rec.timer = setTimeout(() => removeToast(rec), ms);
+    return rec;
+  }
+
+  // "Collected +5 Gold!" Picking up more of the same thing while the message is
+  // still showing adds to it, so a trail of coins is one line, not many.
+  function showGainToast(amount, name, ms = 3000) {
+    const key = `gain:${name}`;
+    const existing = activeToasts.find(t => t.key === key);
+    const total = (existing ? existing.total : 0) + amount;
+
+    const rec = showToast(`Collected +${total} ${name}!`, ms, key);
+    rec.total = total;
+  }
+
+  
   
   function collectCoin(node) {
       if (node.isCollecting) return;
@@ -2041,17 +2622,28 @@
           if (progress < 1) {
               requestAnimationFrame(pullAnimation);
           } else {
+              const couldAffordPlot = playerGold >= PLOT_PRICE;
+
               playerGold += node.value;
               localStorage.setItem('rpg_player_gold', playerGold);
               updateGoldDisplay();
-              showGoldPopup(node.value);
-          
+              showGainToast(node.value, 'Gold');
+
               node.marker.remove();
-          
+
               const idx = activeGoldNodes.indexOf(node);
               if (idx !== -1) activeGoldNodes.splice(idx, 1);
-          
-              renderSelectedPlotCard();
+
+              // Leave the open card alone, unless this coin changes what it shows:
+              if (activeTarget && activeTarget.node === node) {
+                  // it was this coin's own card
+                  stopLiveDistanceUpdates();
+                  renderSelectedPlotCard();
+              } else if (selectedPlotId && !claimedPlotIds.has(selectedPlotId) &&
+                         !couldAffordPlot && playerGold >= PLOT_PRICE) {
+                  // the Buy Plot button just became affordable
+                  renderSelectedPlotCard();
+              }
           }
       }
   
@@ -2141,17 +2733,18 @@
   
       goldContainer.addEventListener('click', (e) => {
           e.stopPropagation();
-          cancelAnyActiveCollection();
-          clearSelectedPlot();
-          closeBackpackIfOpen(false);
-      
+
           const dist = getDistanceFeet(userLat, userLng, goldNode.lat, goldNode.lng);
-      
+
+          // Close enough: just grab it, without touching whatever is open.
           if (dist <= INTERACTION_RADIUS_FEET) {
               collectCoin(goldNode);
               return;
           }
-      
+
+          cancelAnyActiveCollection();
+          clearSelectedPlot();
+          closeBackpackIfOpen(false);
           ensureUIPanelVisible();
       
           const container = document.getElementById('plot-info');
@@ -2163,6 +2756,7 @@
               if (distNow <= INTERACTION_RADIUS_FEET) {
                   collectCoin(goldNode);
                   stopLiveDistanceUpdates();
+                  renderSelectedPlotCard();
                   return;
               }
       
@@ -2293,7 +2887,7 @@
       const combatElem = document.getElementById('stat-combat-skill');
       const enduranceElem = document.getElementById('stat-endurance');
       if (combatElem) combatElem.innerText = getEffectiveCombatSkill();
-      if (enduranceElem) enduranceElem.innerText = getEffectiveEndurance();
+      updateHPDisplay();
       updateQuestUI();	
 	
   }
@@ -2577,11 +3171,9 @@
     if (isGear) {
       playerInventory.add(recipe.id);
       localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
-      showFloatingPopup(`+1 ${recipe.name}`, true);
       showToast(`Crafted ${recipe.name}!`, 4500);
     } else {
       addResource(recipe.id, recipe.yieldAmount);
-      showFloatingPopup(`+${recipe.yieldAmount} ${recipe.name}`, true);
       showToast(`Smelted ${recipe.yieldAmount} ${recipe.name}!`, 4500);
     }
   
@@ -2964,6 +3556,7 @@
         spawnAvailableNPCs();
         initNPCMovement();
         setInterval(checkItemRespawns, 30000);
+        initCombat();
 		
         map.jumpTo({ center: [userLng, userLat], zoom: 17.95 });
       } else {
@@ -3147,7 +3740,7 @@
         } catch (err) {}
 
         applyGridVisibility();
-        showToast(gridVisible ? 'Grid shown' : 'Grid hidden', 1500);
+        showToast(gridVisible ? 'Grid shown' : 'Grid hidden', 1500, 'grid');
       });
     }
 
