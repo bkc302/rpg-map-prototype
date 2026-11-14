@@ -22,7 +22,7 @@
   const INTERACTION_RADIUS_FEET = 150;
 
   // How much decorative grass is on the map: 0 = none, 1 = not much, 10 = a lot.
-  const GRASS_AMOUNT = 5;
+  const GRASS_AMOUNT = 9;
   // How many tufts each step of GRASS_AMOUNT adds per map square (a square is about 206 px wide).
   // 10 x 1.2 = about 12 tufts per square. Raise this if even 10 is not enough.
   const GRASS_PATCHES_PER_LEVEL = 1.2;
