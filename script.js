@@ -20,6 +20,9 @@
   const PLOT_PRICE = 100;
   const MIN_START_ACCURACY_FEET = 30; 
   const INTERACTION_RADIUS_FEET = 150;
+
+  // How much decorative grass is scattered on the map: 1 = just a few patches, 10 = lots.
+  const GRASS_AMOUNT = 5;
   
   function getResource(name) {
     return parseInt(localStorage.getItem(`rpg_resource_${name}`) || '0', 10);
@@ -111,6 +114,8 @@
           quests: [
               {
                   questId: "bramble_intro_quest",
+                  rewardXP: 25,
+                  xpBackfill: true,
                   title: "Buy an Axe",
                   objectives: [
                       { text: "Gather gold", count: () => playerGold, max: NPC_DEFS.timberPete.price, doneWhen: () => playerInventory.has("axe") },
@@ -129,6 +134,8 @@
               },
               {
                   questId: "bramble_second_quest",
+                  rewardXP: 35,
+                  xpBackfill: true,
                   title: "Get a Mining Pick",
                   objectives: [
                       { text: "Gather wood", count: () => getResource("Wood"), max: NPC_DEFS.minerGus.price, doneWhen: () => playerInventory.has("mining pick") },
@@ -160,6 +167,8 @@
           quests: [
               {
                   questId: "grubwick_crafting_quest",
+                  rewardXP: 60,
+                  xpBackfill: true,
                   title: "Build a Workbench",
                   objectives: [
                       { text: "Buy a plot of land", flag: () => claimedPlotIds.size > 0, hint: () => `Costs ${PLOT_PRICE} gold. Tap a square on the map.` },
@@ -179,6 +188,8 @@
               },
               {
                   questId: "grubwick_forge_quest",
+                  rewardXP: 80,
+                  xpBackfill: true,
                   title: "Fire Up the Forge",
                   objectives: [
                       { text: "Have an empty plot to build on", flag: () => isBuildingBuilt("forge") || [...claimedPlotIds].some(id => !plotBuildings[id]), hint: () => `Each plot holds one building. Buy another plot for ${PLOT_PRICE} gold.` },
@@ -200,6 +211,25 @@
                       readyToTurnIn: "A forge, and a copper ingot to show for it! There's nothing like the glow of fresh metal.",
                       completed: "Fine work! Here's 75 gold for your trouble. Timber Pete has been asking after you, by the way. He's got a job that calls for a sturdy shield."
                   }
+              },
+              {
+                  questId: "grubwick_goblin_quest",
+                  title: "First Blood",
+                  objectives: [
+                      { text: "Defeat goblins", count: () => getQuestProgress("grubwick_goblin_quest"), max: 3, hint: "Tap a goblin on the map, then press Fight. Your health slowly comes back over time." }
+                  ],
+                  requiredItems: [],
+                  kill: { family: "goblin", count: 3 },
+                  rewardGold: 75,
+                  rewardXP: 60,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+                  dialog: {
+                      offer: "You've got a forge, a sword and a shield. Time to put them to use! Goblins have been creeping around here. Tap one and press Fight, and remember you can always walk away if it goes badly. Beat three of them for me. Ready?",
+                      inProgress: "Still hunting? Goblins wander all over. Tap one to see how tough it is before you fight. If you're hurt, rest first.",
+                      readyToTurnIn: "Three goblins down! You're turning into a real adventurer.",
+                      completed: "Well done! Here's 75 gold and some well-earned experience. Keep fighting and you'll grow stronger. Ranger Bramblefoot is looking for someone who can handle goblins. Reach level 2 and he'll find you."
+                  }
               }
           ]
       },
@@ -217,6 +247,8 @@
           quests: [
               {
                   questId: "pete_shield_quest",
+                  rewardXP: 60,
+                  xpBackfill: true,
                   title: "A Sturdy Shield",
                   objectives: [
                       { text: "Gather wood", count: () => getResource("Wood"), max: () => GEAR_DEFS.woodenShield.costs["Wood"], doneWhen: () => playerInventory.has("wooden shield") },
@@ -249,6 +281,8 @@
           quests: [
               {
                   questId: "gus_bronze_quest",
+                  rewardXP: 120,
+                  xpBackfill: true,
                   title: "Bronze Work",
                   objectives: [
                       { text: "Smelt bronze ingots", count: () => getResource("Bronze Ingot"), max: 2, hint: () => `At your forge. Each needs ${formatCosts(SMELTING_RECIPES.bronzeIngot.costs)}, so smelt copper and tin ore into ingots first.` }
@@ -263,6 +297,135 @@
                       inProgress: "Bronze takes patience. Smelt your copper and tin into ingots first, then combine them at the forge. Two copper ingots and two tin ingots make one bronze.",
                       readyToTurnIn: "Beautiful! Look at that color. That's proper bronze.",
                       completed: "Here's 100 gold for your trouble. Bronze won't be the last metal you work with. Keep that sword sharp. Something tells me you'll need it before long."
+                  }
+              }
+          ]
+      },
+
+      rangerBrambleHunt: {
+          id: "rangerBrambleHunt",
+          name: "Ranger Bramblefoot",
+          img: "bramblefoot.png",
+          talkRadius: INTERACTION_RADIUS_FEET,
+          spawnRadius: 1,
+          offsetX: 0.20,
+          offsetY: 0.50,
+          disabledKey: "rpg_npc_disabled_bramble_hunt",
+          appearsAfterQuest: "bramble_second_quest",
+          appearsAtLevel: 2,
+          quests: [
+              {
+                  questId: "bramble_goblin_hunt",
+                  title: "Goblin Trouble",
+                  minLevel: 2,
+                  objectives: [
+                      { text: "Defeat goblins", count: () => getQuestProgress("bramble_goblin_hunt"), max: 5 }
+                  ],
+                  requiredItems: [],
+                  kill: { family: "goblin", count: 5 },
+                  rewardGold: 120,
+                  rewardXP: 100,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+                  dialog: {
+                      locked: "The goblins are getting bolder, but you are not ready for the real trouble yet. Come back at level 2.",
+                      offer: "Ah, there you are! The goblins are getting bolder and I need five of them gone from these parts. Any goblin counts, raiders too. Defeat five and I will make it worth your while.",
+                      inProgress: "Still out there with the goblins? Keep at it. Five of them, any kind.",
+                      readyToTurnIn: "Five goblins fewer! The woods feel safer already.",
+                      completed: "Excellent! Here's 120 gold and some experience. There's worse out there, though: goblin raiders. Come back when you've reached level 4."
+                  }
+              },
+              {
+                  questId: "bramble_raider_hunt",
+                  title: "Raider Hunt",
+                  minLevel: 4,
+                  objectives: [
+                      { text: "Defeat Goblin Raiders", count: () => getQuestProgress("bramble_raider_hunt"), max: 3 }
+                  ],
+                  requiredItems: [],
+                  kill: { id: "goblinRaider", count: 3 },
+                  rewardGold: 250,
+                  rewardXP: 300,
+                  rewardItems: [],
+                  disappearOnComplete: false,
+                  dialog: {
+                      locked: "Goblin raiders are far too dangerous for you right now. Come back when you have reached level 4.",
+                      offer: "Goblin raiders have been spotted. They're bigger, meaner and well armed. Defeat three Goblin Raiders and I will pay you very well. Take your best gear!",
+                      inProgress: "The raiders hit hard. Rest up between fights and use your best gear.",
+                      readyToTurnIn: "Three raiders down. You have my respect, adventurer.",
+                      completed: "Magnificent! Here's 250 gold and plenty of experience. Brutes are out there too. Be careful."
+                  }
+              }
+          ]
+      },
+
+      timberPeteOrders: {
+          id: "timberPeteOrders",
+          name: "Timber Pete",
+          img: "pete.png",
+          talkRadius: INTERACTION_RADIUS_FEET,
+          spawnRadius: 1,
+          offsetX: 0.70,
+          offsetY: 0.30,
+          disabledKey: "rpg_npc_disabled_pete_orders",
+          appearsAfterQuest: "pete_shield_quest",
+          appearsAtLevel: 3,
+          quests: [
+              {
+                  questId: "pete_lumber_order",
+                  title: "Lumber Order",
+                  minLevel: 3,
+                  objectives: [
+                      { text: "Gather wood", count: () => getResource("Wood"), max: 40, hint: "Trees and goblins both give wood." }
+                  ],
+                  requiredItems: [],
+                  requiredResources: { "Wood": 40 },
+                  rewardGold: 100,
+                  rewardXP: 80,
+                  rewardItems: [],
+                  disappearOnComplete: true,
+                  dialog: {
+                      locked: "I've got a big lumber order, but it's too much for a beginner. Come back at level 3.",
+                      offer: "Business is booming! I've got a big lumber order and I'm short on wood. Bring me 40 wood and I'll pay you well. Chop it yourself, or goblins sometimes carry some. Deal?",
+                      inProgress: "Still gathering? I need 40 wood. Trees are good for that, and goblins sometimes drop some.",
+                      readyToTurnIn: "That's a fine pile of lumber! Exactly what I needed.",
+                      completed: "Here's 100 gold and a little extra for the effort. Pleasure doing business!"
+                  }
+              }
+          ]
+      },
+
+      minerGusIron: {
+          id: "minerGusIron",
+          name: "Miner Gus",
+          img: "gus.png",
+          talkRadius: INTERACTION_RADIUS_FEET,
+          spawnRadius: 1,
+          offsetX: 0.30,
+          offsetY: 0.65,
+          disabledKey: "rpg_npc_disabled_gus_iron",
+          appearsAfterQuest: "gus_bronze_quest",
+          appearsAtLevel: 5,
+          quests: [
+              {
+                  questId: "gus_iron_quest",
+                  title: "Iron Will",
+                  minLevel: 5,
+                  objectives: [
+                      { text: "Smelt iron ingots", count: () => getResource("Iron Ingot"), max: () => GEAR_DEFS.ironSword.costs["Iron Ingot"], doneWhen: () => playerInventory.has("iron sword"), hint: () => `Each needs ${formatCosts(SMELTING_RECIPES.ironIngot.costs)}, smelted at your forge.` },
+                      { text: "Craft an iron sword", flag: () => playerInventory.has("iron sword"), hint: () => `Needs ${formatCosts(GEAR_DEFS.ironSword.costs)}, crafted at your workbench` }
+                  ],
+                  requiredItems: ["iron sword"],
+                  rewardGold: 300,
+                  rewardXP: 400,
+                  rewardItems: [],
+                  disappearOnComplete: true,
+                  dialog: {
+                      locked: "You're getting good with metal, but iron is for the more experienced. Come back at level 5.",
+                      offer: "You've mastered bronze. Now for the real thing: iron! Smelt some iron ingots and craft yourself an iron sword. Show me you can handle it.",
+                      inProgress: "Iron takes a lot of ore. Smelt it into ingots at your forge, then craft the sword at your workbench.",
+                      readyToTurnIn: "An iron sword! Now THAT is a proper weapon.",
+                      completed: "Magnificent! Here's 300 gold and plenty of experience. You're becoming a legend, adventurer."
                   }
               }
           ]
@@ -289,6 +452,7 @@
       resourceName: 'Wood',
   
       mainImage: 'tree.png',
+      mainImages: ['tree.png', 'tree2.png'],   // each tree picks one of these (looks only)
       collectedImage: 'cut_tree.png',
       zoomImage: 'wood.png',
   
@@ -546,11 +710,11 @@
   }
   
   function getEffectiveCombatSkill() {
-    return BASE_COMBAT_SKILL + getBestGearModifier('combatSkill');
+    return BASE_COMBAT_SKILL + getBestGearModifier('combatSkill') + levelCombatBonus(getLevel());
   }
   
   function getEffectiveEndurance() {
-    return BASE_ENDURANCE + getBestGearModifier('endurance');
+    return BASE_ENDURANCE + getBestGearModifier('endurance') + levelEnduranceBonus(getLevel());
   }
 
   let wakeLock = null;
@@ -807,9 +971,74 @@
       activeTarget = null;
   }
 
+  // ---------- grass patches (decoration only: no clicks, no gameplay) ----------
+  const GRASS_IMAGES = ['grass1.png', 'grass2.png', 'grass3.png', 'grass4.png'];
+  const GRASS_MIN_ZOOM = 17.75;    // grass is hidden when zoomed out further than this
+  const GRASS_PATCH_SLOTS = 6;     // most patches one tile can ever hold
+  let grassNodes = [];
+
+  // Which patches belong on a tile. Everything comes from the tile's position, so the grass
+  // is always in the same places, and raising GRASS_AMOUNT only ADDS patches.
+  function getGrassPatchesForTile(gridX, gridY) {
+    const amount = Math.min(10, Math.max(1, Number(GRASS_AMOUNT) || 1));
+    const chance = (amount * 0.3) / GRASS_PATCH_SLOTS;   // on average, amount x 0.3 patches per tile
+    const patches = [];
+
+    for (let k = 0; k < GRASS_PATCH_SLOTS; k++) {
+      if (getItemPlacementScore(gridX, gridY, `grass_${k}_show`) >= chance) continue;
+
+      const fx = 0.08 + 0.84 * getItemPlacementScore(gridX, gridY, `grass_${k}_x`);
+      const fy = 0.08 + 0.84 * getItemPlacementScore(gridX, gridY, `grass_${k}_y`);
+      const pick = getItemPlacementScore(gridX, gridY, `grass_${k}_img`);
+      const image = GRASS_IMAGES[Math.min(GRASS_IMAGES.length - 1, Math.floor(pick * GRASS_IMAGES.length))];
+
+      patches.push({ fx, fy, image });
+    }
+
+    return patches;
+  }
+
+  function spawnGrass(cells) {
+    for (const cell of cells) {
+      for (const patch of getGrassPatchesForTile(cell.gridX, cell.gridY)) {
+        const { lat, lng } = gridToLatLng(cell.gridX + patch.fx, cell.gridY + patch.fy);
+
+        const container = document.createElement('div');
+        container.className = 'grass-marker-container';
+
+        const img = document.createElement('img');
+        img.className = 'grass-marker-icon';
+        img.src = patch.image;
+        img.alt = '';
+        img.draggable = false;
+        container.appendChild(img);
+
+        const marker = new maplibregl.Marker({ element: container, anchor: 'center' })
+          .setLngLat([lng, lat])
+          .addTo(map);
+
+        const node = { marker, element: container, broken: false };
+
+        // Picture missing: just skip that patch.
+        img.onerror = () => {
+          node.broken = true;
+          container.style.display = 'none';
+        };
+
+        grassNodes.push(node);
+      }
+    }
+  }
+
+  function clearGrass() {
+    grassNodes.forEach(node => node.marker.remove());
+    grassNodes = [];
+  }
+
   function clearItems() {
     activeItemNodes.forEach(node => node.marker.remove());
     activeItemNodes = [];
+    clearGrass();
   }
   
   function removeItemsFromClaimedPlots() {
@@ -848,6 +1077,16 @@
       return hash - Math.floor(hash);
   }
   
+  // Which picture this tile's resource uses. A type can list several `mainImages`;
+  // the choice comes from the tile's position, so a given tree always looks the same.
+  function pickMainImage(def, gridX, gridY) {
+    const options = (def.mainImages && def.mainImages.length) ? def.mainImages : [def.mainImage];
+    if (options.length === 1) return options[0];
+
+    const r = getItemPlacementScore(gridX, gridY, `${def.id}_look`);
+    return options[Math.min(options.length - 1, Math.floor(r * options.length))];
+  }
+
   function getItemStorageKey(itemDef, tileKey) {
     return `${itemDef.id}_${tileKey}`;
   }
@@ -937,6 +1176,9 @@
           }
       }
   
+      // Decorative grass first, so it is drawn underneath everything else.
+      spawnGrass(candidateCells);
+
       // Each tile independently determines whether it contains a resource.
       for (const cell of candidateCells) {
   
@@ -968,6 +1210,7 @@
           if (!selectedDef) continue;
   
           const def = selectedDef;
+          const mainImage = pickMainImage(def, cell.gridX, cell.gridY);
   
           const { lat: itemLat, lng: itemLng } =
               gridToLatLng(cell.gridX + 0.50, cell.gridY + 0.50);
@@ -989,7 +1232,7 @@
                   img.style.display = 'none';
               }
           } else {
-              img.src = def.mainImage;
+              img.src = mainImage;
           }
   
           container.appendChild(img);
@@ -1011,7 +1254,8 @@
               marker,
               element: container,
               img,
-              isCollected
+              isCollected,
+              mainImage
           };
   
           if (isCollected) {
@@ -1019,6 +1263,15 @@
           }
   
           activeItemNodes.push(node);
+
+          // If an alternate picture (e.g. tree2.png) is missing, use the normal one
+          // so the resource never turns invisible.
+          img.onerror = () => {
+              if (mainImage !== def.mainImage && node.mainImage === mainImage) {
+                  node.mainImage = def.mainImage;
+                  if (img.getAttribute('src') === mainImage) img.src = def.mainImage;
+              }
+          };
   
           container.addEventListener('click', e => {
               e.stopPropagation();
@@ -1179,6 +1432,11 @@
   
   function updateItemVisibility() {
     const zoom = map.getZoom();
+
+    const showGrass = zoom >= GRASS_MIN_ZOOM;
+    grassNodes.forEach(node => {
+      node.element.style.display = (showGrass && !node.broken) ? '' : 'none';
+    });
   
     activeItemNodes.forEach(node => {
       const def = node.def;
@@ -1199,7 +1457,7 @@
   
       node.element.style.display = 'flex';
   
-      const wantedSrc = isZoomedOut ? def.zoomImage : def.mainImage;
+      const wantedSrc = isZoomedOut ? def.zoomImage : node.mainImage;
       if (node.img.getAttribute('src') !== wantedSrc) node.img.src = wantedSrc;
     });
   }
@@ -1252,97 +1510,101 @@
       }
   }
 
-  function startItemCollectionCountdown(node) {
+  // Shared by gathering and crafting: a 5 second action that needs you to stay in range.
+  const TIMED_ACTION_MS = 5000;
+
+  function startTimedAction({ headline, lat, lng, chops = false, cancelTitle, onComplete }) {
       stopLiveDistanceUpdates();
       cancelAnyActiveCollection();
-  
+
       const container = document.getElementById('plot-info');
       const progressBox = document.getElementById('collection-progress');
       const progressBar = document.getElementById('collection-progress-bar');
-  
+
       progressBox.style.display = 'block';
       progressBar.style.width = '100%';
-  
+
       container.innerHTML = `
-        <b>Collecting ${node.def.name}...</b><br/>
+        <b>${headline}</b><br/>
         <small>Stay within range for 5 seconds!</small>
       `;
-  
-      const startTime = performance.now();
-  
-      const playChopSound = () => {
-          const sfx = chopSound.cloneNode();
-          sfx.currentTime = 0;
-          sfx.play().catch(() => {});
-      };
-  
-      // Exactly 5 chops: 0s, 1s, 2s, 3s, and 4s.
-      for (let i = 0; i < 5; i++) {
-          collectionChopTimeouts.push(setTimeout(() => {
-              // Don't play if collection was cancelled.
-              if (!collectionInterval) return;
 
-              playChopSound();
-          }, i * 1000));
+      const startTime = performance.now();
+
+      if (chops) {
+          const playChopSound = () => {
+              const sfx = chopSound.cloneNode();
+              sfx.currentTime = 0;
+              sfx.play().catch(() => {});
+          };
+
+          // Exactly 5 chops: 0s, 1s, 2s, 3s, and 4s.
+          for (let i = 0; i < 5; i++) {
+              collectionChopTimeouts.push(setTimeout(() => {
+                  // Don't play if it was cancelled.
+                  if (!collectionInterval) return;
+
+                  playChopSound();
+              }, i * 1000));
+          }
       }
-  
+
       // Progress bar animation.
       collectionProgressInterval = setInterval(() => {
           const elapsed = performance.now() - startTime;
-          const progress = Math.min(elapsed / 5000, 1);
-  
+          const progress = Math.min(elapsed / TIMED_ACTION_MS, 1);
+
           progressBar.style.width = `${(1 - progress) * 100}%`;
-  
+
           if (progress >= 1) {
               clearInterval(collectionProgressInterval);
               collectionProgressInterval = null;
           }
       }, 50);
-  
+
       // Finish exactly 5 seconds after starting.
       collectionInterval = setTimeout(() => {
           collectionInterval = null;
-  
+
           if (collectionProgressInterval) {
               clearInterval(collectionProgressInterval);
               collectionProgressInterval = null;
           }
-  
+
           progressBar.style.width = '0%';
-  
-          finishItemCollection(node);
-      }, 5000);
-  
+
+          cancelAnyActiveCollection();
+          stopLiveDistanceUpdates();
+          onComplete();
+      }, TIMED_ACTION_MS);
+
       collectionCancelCheck = setInterval(() => {
           if (!userLat || !userLng) return;
-  
-          const dist = getDistanceFeet(
-              userLat,
-              userLng,
-              node.lat,
-              node.lng
-          );
-  
+
+          const dist = getDistanceFeet(userLat, userLng, lat, lng);
+
           if (dist > INTERACTION_RADIUS_FEET) {
-              cancelItemCollection();
+              cancelAnyActiveCollection();
+
+              document.getElementById('plot-info').innerHTML = `
+                <b>❌ ${cancelTitle}</b><br/>
+                <small>You moved too far away!</small>
+              `;
           }
       }, 300);
   }
-  
-  function cancelItemCollection() {
-    cancelAnyActiveCollection();
 
-    document.getElementById('plot-info').innerHTML = `
-      <b>❌ Collection Cancelled</b><br/>
-      <small>You moved too far away!</small>
-    `;
+  function startItemCollectionCountdown(node) {
+      startTimedAction({
+          headline: `Collecting ${node.def.name}...`,
+          lat: node.lat,
+          lng: node.lng,
+          chops: true,
+          cancelTitle: 'Collection Cancelled',
+          onComplete: () => collectItem(node)
+      });
   }
-  
-  function finishItemCollection(node) {
-      cancelAnyActiveCollection();
-      stopLiveDistanceUpdates();
-      collectItem(node);
-  }
+
   
   function spawnNPC(def) {
   
@@ -1352,6 +1614,7 @@
       }
   
       if (def.appearsAfterQuest && !isQuestComplete(def.appearsAfterQuest)) return;
+      if (def.appearsAtLevel && getLevel() < def.appearsAtLevel) return;
 
       const disabled = localStorage.getItem(def.disabledKey) === "true";
       if (disabled) return;
@@ -1605,10 +1868,11 @@
   function isQuestReady(quest) {
       const hasItems = (quest.requiredItems || []).every(item => playerInventory.has(item));
       const hasBuildings = (quest.requiredBuildings || []).every(isBuildingBuilt);
+      const hasKills = !quest.kill || getQuestProgress(quest.questId) >= quest.kill.count;
       const hasResources = Object.entries(quest.requiredResources || {})
           .every(([res, amt]) => getResource(res) >= amt);
 
-      return hasItems && hasBuildings && hasResources;
+      return hasItems && hasBuildings && hasResources && hasKills;
   }
 
   function formatCosts(costs) {
@@ -1654,9 +1918,11 @@
               if (isQuestAccepted(quest.questId)) {
                   entries.push({ npc, quest, state: 'active' });
               } else {
-                  const unlocked = !npc.appearsAfterQuest || isQuestComplete(npc.appearsAfterQuest);
+                  const unlocked = (!npc.appearsAfterQuest || isQuestComplete(npc.appearsAfterQuest)) &&
+                           (!npc.appearsAtLevel || getLevel() >= npc.appearsAtLevel);
+                  const levelOk = getLevel() >= (quest.minLevel || 0);
                   const gone = npc.disabledKey && localStorage.getItem(npc.disabledKey) === 'true';
-                  if (unlocked && !gone) entries.push({ npc, quest, state: 'available' });
+                  if (unlocked && levelOk && !gone) entries.push({ npc, quest, state: 'available' });
               }
           }
       }
@@ -1699,6 +1965,7 @@
                 <div class="quest-entry">
                   <div class="quest-title">📜 ${e.quest.title || e.quest.questId}</div>
                   <div class="quest-giver">from ${e.npc.name}</div>
+                  ${formatReward(e.quest) ? `<div class="quest-reward">Reward: ${formatReward(e.quest)}</div>` : ''}
                   <ul class="quest-objectives">${(e.quest.objectives || []).map(renderQuestObjectiveHTML).join('')}</ul>
                   ${ready ? `<div class="quest-turnin">➡ Return to ${e.npc.name} to turn in this quest.${e.quest.requiredResources ? ` (you will hand over ${formatCosts(e.quest.requiredResources)})` : ''}</div>` : ''}
                 </div>`;
@@ -1793,7 +2060,10 @@
       const nextQuest = def.quests.find(q => !isQuestComplete(q.questId));
       if (!nextQuest) return 'none';
   
-      if (!isQuestAccepted(nextQuest.questId)) return 'available';
+      if (!isQuestAccepted(nextQuest.questId)) {
+          // Not offered until you are a high enough level.
+          return (nextQuest.minLevel || 0) > getLevel() ? 'none' : 'available';
+      }
   
       return isQuestReady(nextQuest) ? 'ready' : 'in-progress';
   }
@@ -1862,11 +2132,22 @@
   
           const dialog = nextQuest.dialog;
           const accepted = isQuestAccepted(nextQuest.questId);
+
+          // Some quests are not offered until you reach a certain level.
+          if (!accepted && getLevel() < (nextQuest.minLevel || 0)) {
+              container.innerHTML = `
+                  <b>${def.name}:</b><br/>
+                  <i>${dialog.locked || `Come back when you have reached level ${nextQuest.minLevel}.`}</i><br/>
+                  <small style="color:#f7f7f7;">You are level ${getLevel()}. This needs level ${nextQuest.minLevel}.</small>
+              `;
+              return;
+          }
   
           if (!accepted) {
               container.innerHTML = `
                   <b>${def.name}:</b><br/>
                   <i>${dialog.offer}</i><br/>
+                  ${formatReward(nextQuest) ? `<small>Reward: ${formatReward(nextQuest)}</small><br/>` : ''}
                   <button id="quest-accept-btn" class="btn buy-btn" style="margin-top:6px;">Accept Quest</button>
               `;
   
@@ -1935,6 +2216,11 @@
               
               // Spawn any quest NPCs unlocked by completing this quest.
               spawnQuestNPCsUnlockedByQuest(nextQuest.questId);
+
+              if (nextQuest.rewardXP) {
+                  markQuestXPPaid(nextQuest.questId);
+                  gainXP(nextQuest.rewardXP);
+              }
               
               showToast(dialog.completed, 8000);
           
@@ -1958,29 +2244,259 @@
   }
   
   // =====================================================================
+  // LEVELS & XP
+  // =====================================================================
+  const MAX_LEVEL = 30;
+  // Quests finished before they gave XP pay it out once, the first time the game loads.
+  // Set to false to skip that.
+  const BACKFILL_LEGACY_QUEST_XP = true;
+
+  const XP_BASE = 100;   // XP to go from level 1 to 2. It doubles with every level after that.
+
+  // What each level gives you, on top of your gear.
+  const LEVEL_BONUS = {
+    endurancePerLevel: 2,   // +2 Endurance (max HP) for every level after 1
+    combatSkillEvery: 2     // +1 Combat Skill every 2 levels (levels 2, 4, 6, ...)
+  };
+
+  function xpForNextLevel(level) {
+    return XP_BASE * Math.pow(2, level - 1);   // 100, 200, 400, 800, ...
+  }
+
+  function levelCombatBonus(level) {
+    return Math.floor(level / LEVEL_BONUS.combatSkillEvery);
+  }
+
+  function levelEnduranceBonus(level) {
+    return (level - 1) * LEVEL_BONUS.endurancePerLevel;
+  }
+
+  let playerLevel = null;   // null until first used (loaded from the save)
+  let playerXP = 0;         // XP earned toward the NEXT level
+
+  function loadProgress() {
+    const lvl = parseInt(localStorage.getItem('rpg_player_level'), 10);
+    const xp = parseInt(localStorage.getItem('rpg_player_xp'), 10);
+
+    playerLevel = (Number.isFinite(lvl) && lvl >= 1) ? Math.min(lvl, MAX_LEVEL) : 1;
+    playerXP = (Number.isFinite(xp) && xp >= 0) ? xp : 0;
+  }
+
+  function saveProgress() {
+    localStorage.setItem('rpg_player_level', String(playerLevel));
+    localStorage.setItem('rpg_player_xp', String(playerXP));
+  }
+
+  function getLevel() {
+    if (playerLevel === null) loadProgress();
+    return playerLevel;
+  }
+
+  function updateXPDisplay() {
+    const level = getLevel();
+    const fill = document.getElementById('xp-bar-fill');
+    const text = document.getElementById('xp-bar-text');
+    if (!fill || !text) return;
+
+    if (level >= MAX_LEVEL) {
+      fill.style.width = '100%';
+      text.textContent = `Lv ${level} · MAX`;
+      return;
+    }
+
+    const need = xpForNextLevel(level);
+    fill.style.width = `${Math.min(100, (playerXP / need) * 100)}%`;
+    text.textContent = `Lv ${level} · ${playerXP}/${need} XP`;
+  }
+
+  function gainXP(amount) {
+    const level = getLevel();
+    if (!(amount > 0) || level >= MAX_LEVEL) return;
+
+    playerXP += amount;
+
+    let leveledUp = false;
+    while (playerLevel < MAX_LEVEL && playerXP >= xpForNextLevel(playerLevel)) {
+      playerXP -= xpForNextLevel(playerLevel);
+      playerLevel++;
+      leveledUp = true;
+    }
+    if (playerLevel >= MAX_LEVEL) playerXP = 0;
+
+    saveProgress();
+    updateXPDisplay();
+    showGainToast(amount, 'XP');
+
+    if (leveledUp) onLevelUp();
+  }
+
+  function onLevelUp() {
+    setPlayerHP(getMaxHP());      // a level-up fully heals you
+    updateInventoryDisplay();     // stat pills + quest list
+    showToast(`Level up! You are now level ${playerLevel}.`, 6000, 'levelup');
+
+    spawnNewlyAvailableNPCs();
+    updateAllQuestIndicators();
+  }
+
+  // After a level-up (or quest), bring in any NPC that was waiting for it
+  // without moving the ones already on the map.
+  function spawnNewlyAvailableNPCs() {
+    for (const key in QUEST_NPC_DEFS) {
+      const def = QUEST_NPC_DEFS[key];
+      if (npcNodes[def.id]) continue;
+      spawnNPC(def);   // spawnNPC itself checks quest / level / disabled rules
+    }
+  }
+
+  // ---------- quest XP bookkeeping ----------
+  // `rpg_quest_xp_paid` remembers which quests already paid their XP, so nothing pays twice.
+  function getPaidQuestXP() {
+    try {
+      const list = JSON.parse(localStorage.getItem('rpg_quest_xp_paid'));
+      return Array.isArray(list) ? list : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function markQuestXPPaid(questId) {
+    const paid = getPaidQuestXP();
+    if (!paid.includes(questId)) {
+      paid.push(questId);
+      localStorage.setItem('rpg_quest_xp_paid', JSON.stringify(paid));
+    }
+  }
+
+  // Pays XP for older quests you had already finished before quests gave XP.
+  function backfillQuestXP() {
+    if (!BACKFILL_LEGACY_QUEST_XP) return;
+
+    const paid = getPaidQuestXP();
+    let total = 0;
+    const newlyPaid = [];
+
+    for (const key in QUEST_NPC_DEFS) {
+      for (const quest of QUEST_NPC_DEFS[key].quests) {
+        if (!quest.xpBackfill || !quest.rewardXP) continue;
+        if (!isQuestComplete(quest.questId) || paid.includes(quest.questId)) continue;
+
+        total += quest.rewardXP;
+        newlyPaid.push(quest.questId);
+      }
+    }
+
+    if (newlyPaid.length === 0) return;
+
+    localStorage.setItem('rpg_quest_xp_paid', JSON.stringify(paid.concat(newlyPaid)));
+    showToast('Bonus XP for quests you already finished!', 6000, 'xp-backfill');
+    gainXP(total);
+  }
+
+  // "75 gold · 60 XP"
+  function formatReward(quest) {
+    const parts = [];
+    if (quest.rewardGold > 0) parts.push(`${quest.rewardGold} gold`);
+    if (quest.rewardXP > 0) parts.push(`${quest.rewardXP} XP`);
+    for (const item of quest.rewardItems || []) parts.push(item);
+    return parts.join(' · ');
+  }
+
+  // ---------- kill counts for quests ----------
+  function getQuestProgressMap() {
+    try {
+      return JSON.parse(localStorage.getItem('rpg_quest_progress')) || {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function getQuestProgress(questId) {
+    return getQuestProgressMap()[questId] || 0;
+  }
+
+  // Counts a kill toward every accepted, unfinished quest that asks for it.
+  function recordKill(def) {
+    const progress = getQuestProgressMap();
+    let changed = false;
+
+    for (const key in QUEST_NPC_DEFS) {
+      for (const quest of QUEST_NPC_DEFS[key].quests) {
+        const k = quest.kill;
+        if (!k || !isQuestAccepted(quest.questId) || isQuestComplete(quest.questId)) continue;
+
+        const matches = (k.id && k.id === def.id) || (k.family && k.family === def.family);
+        if (!matches) continue;
+
+        const cur = progress[quest.questId] || 0;
+        if (cur >= k.count) continue;
+
+        progress[quest.questId] = cur + 1;
+        changed = true;
+        showToast(`${quest.title}: ${cur + 1}/${k.count}`, 3000, `questprog:${quest.questId}`);
+      }
+    }
+
+    if (changed) {
+      localStorage.setItem('rpg_quest_progress', JSON.stringify(progress));
+      updateQuestUI();
+      updateAllQuestIndicators();
+    }
+  }
+
+  // =====================================================================
   // COMBAT: roaming monsters and turn-based fights on the map
   // =====================================================================
 
-  // To swap the colored square for a picture later, set `image` (e.g. 'monster.png').
+  const GOBLIN_MOVEMENT = {
+    speedFeetPerSec: 2.5,
+    wanderMinFeet: 30,
+    wanderMaxFeet: 120,
+    idleMinMs: 3000,
+    idleMaxMs: 9000
+  };
+
+  // `image` is the picture used on the map (color/borderColor are the fallback square).
+  // `drops`: each entry rolls on its own. type 'gold' or 'resource' (with a `name`).
+  // Which tiers appear depends on your level (spawnMinPlayerLevel / spawnMaxPlayerLevel).
   const MONSTER_DEFS = {
-    wanderer: {
-      id: 'wanderer',
-      name: 'Monster',            // placeholder name
-      color: '#b91c1c',
-      borderColor: '#450a0a',
-      image: '',
-      size: 40,
+    goblin: {
+      id: 'goblin', family: 'goblin', name: 'Goblin', level: 1,
+      image: 'goblin.png', color: '#4d7c0f', borderColor: '#1a2e05', size: 48,
+      combatSkill: 9, endurance: 28, xp: 20,
+      drops: [
+        { type: 'gold', min: 5, max: 12, chance: 0.75 },
+        { type: 'resource', name: 'Wood', min: 1, max: 3, chance: 0.5 },
+        { type: 'resource', name: 'Stone', min: 1, max: 2, chance: 0.4 }
+      ],
+      spawnMinPlayerLevel: 1, spawnMaxPlayerLevel: 4, spawnWeight: 1,
+      ...GOBLIN_MOVEMENT
+    },
 
-      combatSkill: 9,
-      endurance: 28,
-      goldMin: 5,
-      goldMax: 12,
+    goblinRaider: {
+      id: 'goblinRaider', family: 'goblin', name: 'Goblin Raider', level: 3,
+      image: 'goblin.png', color: '#a16207', borderColor: '#422006', size: 48,
+      combatSkill: 10, endurance: 38, xp: 80,
+      drops: [
+        { type: 'gold', min: 12, max: 25, chance: 0.85 },
+        { type: 'resource', name: 'Wood', min: 2, max: 4, chance: 0.55 },
+        { type: 'resource', name: 'Stone', min: 2, max: 3, chance: 0.5 }
+      ],
+      spawnMinPlayerLevel: 2, spawnMaxPlayerLevel: 6, spawnWeight: 2,
+      ...GOBLIN_MOVEMENT
+    },
 
-      speedFeetPerSec: 2.5,
-      wanderMinFeet: 30,
-      wanderMaxFeet: 120,
-      idleMinMs: 3000,
-      idleMaxMs: 9000
+    goblinBrute: {
+      id: 'goblinBrute', family: 'goblin', name: 'Goblin Brute', level: 5,
+      image: 'goblin.png', color: '#991b1b', borderColor: '#450a0a', size: 48,
+      combatSkill: 12, endurance: 46, xp: 320,
+      drops: [
+        { type: 'gold', min: 25, max: 45, chance: 0.9 },
+        { type: 'resource', name: 'Wood', min: 3, max: 5, chance: 0.6 },
+        { type: 'resource', name: 'Stone', min: 2, max: 4, chance: 0.55 }
+      ],
+      spawnMinPlayerLevel: 4, spawnMaxPlayerLevel: 99, spawnWeight: 2,
+      ...GOBLIN_MOVEMENT
     }
   };
 
@@ -1992,8 +2508,7 @@
     escapeFeet: 200,                         // get this far away to end a fight
     missChance: 0.10,
     maxDamage: 8,
-    defeatGoldLossPct: 0.10,                 // gold lost when knocked out
-    defeatHpPct: 0.5,                        // HP you wake up with after being knocked out
+    defeatHp: 1,                             // HP you are left with after losing (there is no death)
     hpRegenMs: 10000,                        // 1 HP back every this many ms (not while fighting)
 
     maxMonsters: 3,
@@ -2127,6 +2642,24 @@
   let lastMoveTick = 0;
   let combatInitialized = false;
 
+  // Picks a monster type that suits your level (weighted by spawnWeight).
+  function pickMonsterDef() {
+    const lvl = getLevel();
+    const pool = Object.values(MONSTER_DEFS)
+      .filter(d => lvl >= d.spawnMinPlayerLevel && lvl <= d.spawnMaxPlayerLevel);
+
+    if (pool.length === 0) return MONSTER_DEFS.goblin;
+
+    const total = pool.reduce((sum, d) => sum + d.spawnWeight, 0);
+    let roll = Math.random() * total;
+
+    for (const d of pool) {
+      roll -= d.spawnWeight;
+      if (roll < 0) return d;
+    }
+    return pool[pool.length - 1];
+  }
+
   function createMonsterElement(def) {
     const container = document.createElement('div');
     container.className = 'monster-marker-container';
@@ -2139,22 +2672,39 @@
     const hpFill = document.createElement('div');
     hpBar.appendChild(hpFill);
 
+    const makeSquare = () => {
+      const sq = document.createElement('div');
+      sq.className = 'monster-body';
+      sq.style.background = def.color;
+      sq.style.borderColor = def.borderColor;
+      sq.style.width = `${def.size}px`;
+      sq.style.height = `${def.size}px`;
+      return sq;
+    };
+
     let body;
     if (def.image) {
       body = document.createElement('img');
       body.src = def.image;
       body.className = 'monster-img';
+      body.draggable = false;
+      body.style.width = `${def.size}px`;
+      body.style.height = `${def.size}px`;
+      // If the picture can't be loaded, show the colored square instead.
+      body.onerror = () => {
+        if (body.parentNode) wrap.replaceChild(makeSquare(), body);
+      };
     } else {
-      body = document.createElement('div');
-      body.className = 'monster-body';
-      body.style.background = def.color;
-      body.style.borderColor = def.borderColor;
+      body = makeSquare();
     }
-    body.style.width = `${def.size}px`;
-    body.style.height = `${def.size}px`;
+
+    const badge = document.createElement('div');
+    badge.className = 'monster-level';
+    badge.textContent = `Lv ${def.level}`;
 
     wrap.appendChild(hpBar);
     wrap.appendChild(body);
+    wrap.appendChild(badge);
     container.appendChild(wrap);
 
     return { container, hpBar, hpFill };
@@ -2166,7 +2716,7 @@
     node.hpFill.style.width = `${Math.max(0, (node.hp / node.def.endurance) * 100)}%`;
   }
 
-  function spawnMonster(def = MONSTER_DEFS.wanderer) {
+  function spawnMonster(def = pickMonsterDef()) {
     if (!userLat || !userLng) return null;
 
     const p = projectLatLng(userLat, userLng);
@@ -2294,7 +2844,7 @@
     startLiveDistanceUpdates('monster', node, dist => {
       const def = node.def;
       const inRange = Number(dist) <= COMBAT.fightRangeFeet;
-      const stats = `<small>Combat Skill ${def.combatSkill} · Endurance ${node.hp}/${def.endurance}</small><br/>`;
+      const stats = `<small>Lv ${def.level} · Combat Skill ${def.combatSkill} · Endurance ${node.hp}/${def.endurance} · ${def.xp} XP</small><br/>`;
 
       if (!inRange) {
         container.innerHTML = `
@@ -2306,10 +2856,15 @@
         return;
       }
 
+      const hurt = getHP() <= getMaxHP() * 0.25
+        ? `<small style="color:#fca5a5;">⚠️ You are hurt (${getHP()}/${getMaxHP()} HP). Rest first?</small><br/>`
+        : '';
+
       container.innerHTML = `
         <b>${def.name}</b><br/>
         ${stats}
         <b>✅ In range</b><br/>
+        ${hurt}
         <button id="fight-btn" class="btn buy-btn" style="margin-top:6px;">⚔️ Fight</button>
       `;
 
@@ -2457,6 +3012,36 @@
     box.innerHTML = `<b>${title}</b><br/>${text}`;
   }
 
+  // What a monster leaves behind: each drop entry rolls on its own.
+  function rollDrops(def) {
+    const found = [];
+
+    for (const d of def.drops || []) {
+      if (Math.random() >= d.chance) continue;
+
+      found.push({
+        type: d.type,
+        name: d.type === 'gold' ? 'Gold' : d.name,
+        amount: randInt(d.min, d.max)
+      });
+    }
+
+    return found;
+  }
+
+  function applyDrop(drop) {
+    if (drop.type === 'gold') {
+      playerGold += drop.amount;
+      localStorage.setItem('rpg_player_gold', playerGold);
+      updateGoldDisplay();
+    } else {
+      addResource(drop.name, drop.amount);
+      updateInventoryDisplay();
+    }
+
+    showGainToast(drop.amount, drop.name);
+  }
+
   function endFight(result) {
     const f = activeFight;
     if (!f) return;
@@ -2472,21 +3057,20 @@
     node.element.classList.remove('engaged');
 
     if (result === 'victory') {
-      const gold = randInt(def.goldMin, def.goldMax);
-
-      playerGold += gold;
-      localStorage.setItem('rpg_player_gold', playerGold);
-      updateGoldDisplay();
+      const drops = rollDrops(def);
 
       setPlayerHP(getHP());   // restarts the healing clock
       removeMonster(node);
 
-      const sound = coinAudio.cloneNode();
-      sound.volume = 0.6;
-      sound.play().catch(() => {});
+      showToast('Victory!', 3500, 'victory');
+      drops.forEach(applyDrop);
+      recordKill(def);
+      gainXP(def.xp);         // last, so a level-up message is the newest line
 
-      showToast(`Victory! You found ${gold} gold.`, 4000);
-      showFightResult(f, '🏆 Victory!', `You defeated the ${def.name} and found ${gold} gold.`);
+      const dropText = drops.length
+        ? ` It dropped ${drops.map(d => `${d.amount} ${d.name.toLowerCase()}`).join(', ')}.`
+        : '';
+      showFightResult(f, '🏆 Victory!', `You defeated the ${def.name} and earned ${def.xp} XP.${dropText}`);
       return;
     }
 
@@ -2495,22 +3079,17 @@
     updateMonsterHpBar(node);
 
     if (result === 'defeat') {
-      const lost = Math.floor(playerGold * COMBAT.defeatGoldLossPct);
+      // There is no death: you just don't win, so no XP and no drops.
+      setPlayerHP(COMBAT.defeatHp);
 
-      playerGold -= lost;
-      localStorage.setItem('rpg_player_gold', playerGold);
-      updateGoldDisplay();
-
-      setPlayerHP(Math.max(1, Math.ceil(getMaxHP() * COMBAT.defeatHpPct)));
-
-      showToast(`You were knocked out! You lost ${lost} gold.`, 5000);
-      showFightResult(f, '💫 Knocked out', `The ${def.name} beat you. You lost ${lost} gold and wake up weak.`);
+      showToast('You were beaten. No XP this time.', 5000, 'defeat');
+      showFightResult(f, '💫 Beaten', `The ${def.name} got the better of you. No XP this time. Rest and try again.`);
       return;
     }
 
     // escaped
     setPlayerHP(getHP());
-    showToast('You got away!', 3000);
+    showToast('You got away!', 3000, 'escaped');
     showFightResult(f, '🏃 You got away', `The ${def.name} loses interest and wanders off.`);
   }
 
@@ -2519,6 +3098,7 @@
     combatInitialized = true;
 
     updateHPDisplay();
+    updateXPDisplay();
 
     for (let i = 0; i < 2; i++) spawnMonster();
 
@@ -2528,6 +3108,8 @@
     }, COMBAT.spawnCheckMs);
 
     setInterval(regenTick, 1000);
+
+    backfillQuestXP();
   }
 
   // ---------- Messages at the bottom of the screen ----------
@@ -2888,6 +3470,7 @@
       const enduranceElem = document.getElementById('stat-endurance');
       if (combatElem) combatElem.innerText = getEffectiveCombatSkill();
       updateHPDisplay();
+      updateXPDisplay();
       updateQuestUI();	
 	
   }
@@ -3156,18 +3739,42 @@
     });
   }
   
+  function recipeIsAffordable(recipe) {
+    return Object.entries(recipe.costs).every(([res, amt]) => getResource(res) >= amt);
+  }
+
+  // Tapping Craft / Smelt starts a 5 second timer. Stay near the building until it finishes.
   function craftItem(recipe, buildingNode) {
     const isGear = recipe.type !== 'resource';
-  
+
     if (isGear && playerInventory.has(recipe.id)) return;
-  
-    for (const [res, amt] of Object.entries(recipe.costs)) {
-      if (getResource(res) < amt) return;
+    if (!recipeIsAffordable(recipe)) return;
+
+    const verb = isGear ? 'Crafting' : 'Smelting';
+
+    startTimedAction({
+      headline: `${verb} ${recipe.name}...`,
+      lat: buildingNode.lat,
+      lng: buildingNode.lng,
+      cancelTitle: `${verb} Cancelled`,
+      onComplete: () => finishCrafting(recipe, buildingNode)
+    });
+  }
+
+  function finishCrafting(recipe, buildingNode) {
+    const isGear = recipe.type !== 'resource';
+
+    // Check again: nothing is spent until the 5 seconds are up.
+    if ((isGear && playerInventory.has(recipe.id)) || !recipeIsAffordable(recipe)) {
+      showToast('Not enough resources!', 3000, 'craft-fail');
+      renderBuildingCard(buildingNode);
+      return;
     }
+
     for (const [res, amt] of Object.entries(recipe.costs)) {
       addResource(res, -amt);
     }
-  
+
     if (isGear) {
       playerInventory.add(recipe.id);
       localStorage.setItem("rpg_player_inventory", JSON.stringify([...playerInventory]));
@@ -3176,7 +3783,7 @@
       addResource(recipe.id, recipe.yieldAmount);
       showToast(`Smelted ${recipe.yieldAmount} ${recipe.name}!`, 4500);
     }
-  
+
     updateInventoryDisplay();
     renderBuildingCard(buildingNode);
   }

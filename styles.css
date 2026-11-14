@@ -702,7 +702,7 @@
     #toast-stack {
       position: fixed;
       left: 50%;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); /* above the stats bar and corner buttons */
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 118px); /* above the XP bar, stats bar and corner buttons */
       transform: translateX(-50%);
       z-index: 10000;
 
@@ -1029,4 +1029,91 @@
       margin-top: 6px;
       font-size: 12px;
       color: #94a3b8;
+    }
+
+    /* ==============================
+       XP bar
+       ============================== */
+    #xp-bar {
+      position: fixed;
+      bottom: 86px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+
+      width: min(260px, calc(100vw - 150px));
+      height: 20px;
+      box-sizing: border-box;
+      overflow: hidden;
+
+      background: rgba(15, 23, 42, 0.85);
+      border: 2px solid #334155;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    #xp-bar-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0%;
+      background: #8b5cf6;
+      transition: width 0.4s ease-out;
+    }
+
+    #xp-bar-text {
+      position: relative;
+      text-align: center;
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 16px;
+      color: #f8fafc;
+      text-shadow: 0 1px 2px #000000;
+      white-space: nowrap;
+    }
+
+    /* Level badge under each monster */
+    .monster-level {
+      position: absolute;
+      left: 50%;
+      bottom: -7px;
+      transform: translateX(-50%);
+      padding: 0 4px;
+      border: 1px solid #000000;
+      border-radius: 3px;
+      background: #1f2937;
+      color: #fde68a;
+      font-family: "Courier New", monospace;
+      font-weight: 700;
+      font-size: 10px;
+      line-height: 14px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* ==============================
+       Grass patches (decoration only) and layering
+       ============================== */
+    .grass-marker-container {
+      z-index: 1;                      /* underneath everything else on the map */
+      pointer-events: none !important; /* taps go straight through to the map */
+    }
+
+    .grass-marker-icon {
+      display: block;
+      image-rendering: pixelated;
+      pointer-events: none;
+    }
+
+    /* Buildings had no layer, so give them one above trees/stones and grass */
+    .building-marker-container {
+      z-index: 20;
+    }
+
+    .quest-reward {
+      margin: -4px 0 8px 0;
+      font-size: 12px;
+      color: #fde68a;
     }
