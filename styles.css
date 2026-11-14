@@ -1096,15 +1096,12 @@
     /* ==============================
        Grass patches (decoration only) and layering
        ============================== */
-    .grass-marker-container {
+    .grass-canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
       z-index: 1;                      /* underneath everything else on the map */
-      pointer-events: none !important; /* taps go straight through to the map */
-    }
-
-    .grass-marker-icon {
-      display: block;
-      image-rendering: pixelated;
-      pointer-events: none;
+      pointer-events: none;            /* taps go straight through to the map */
     }
 
     /* Buildings had no layer, so give them one above trees/stones and grass */
