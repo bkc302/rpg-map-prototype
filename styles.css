@@ -1094,17 +1094,9 @@
     }
 
     /* ==============================
-       Grass patches (decoration only) and layering
+       Layering and quest rewards
        ============================== */
-    .grass-canvas {
-      position: absolute;
-      left: 0;
-      top: 0;
-      z-index: 1;                      /* underneath everything else on the map */
-      pointer-events: none;            /* taps go straight through to the map */
-    }
-
-    /* Buildings had no layer, so give them one above trees/stones and grass */
+    /* Buildings had no layer, so give them one above trees and stones */
     .building-marker-container {
       z-index: 20;
     }

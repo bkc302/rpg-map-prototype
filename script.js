@@ -20,12 +20,6 @@
   const PLOT_PRICE = 100;
   const MIN_START_ACCURACY_FEET = 30; 
   const INTERACTION_RADIUS_FEET = 150;
-
-  // How much decorative grass is on the map: 0 = none, 1 = not much, 10 = a lot.
-  const GRASS_AMOUNT = 10;
-  // How many tufts each step of GRASS_AMOUNT adds per map square (a square is about 206 px wide).
-  // 10 x 1.2 = about 12 tufts per square. Raise this if even 10 is not enough.
-  const GRASS_PATCHES_PER_LEVEL = 1.2;
   
   function getResource(name) {
     return parseInt(localStorage.getItem(`rpg_resource_${name}`) || '0', 10);
@@ -455,7 +449,6 @@
       resourceName: 'Wood',
   
       mainImage: 'tree.png',
-      mainImages: ['tree.png', 'tree2.png'],   // each tree picks one of these (looks only)
       collectedImage: 'cut_tree.png',
       zoomImage: 'wood.png',
   
@@ -974,154 +967,9 @@
       activeTarget = null;
   }
 
-  // ---------- grass (decoration only) ----------
-  // All the tufts are drawn on ONE canvas underneath everything else. (One page element per
-  // tuft made the map choppy once there were hundreds.) It can't be tapped, and it is hidden
-  // when you zoom out.
-  const GRASS_IMAGES = ['grass1.png', 'grass2.png', 'grass3.png', 'grass4.png',
-                         'grass5.png', 'grass6.png', 'grass7.png', 'grass8.png'];
-  const GRASS_MIN_ZOOM = 17.75;    // grass is hidden when zoomed out further than this
-  const GRASS_PATCH_SLOTS = 48;    // most tufts one tile can ever hold
-
-  let grassPatches = [];           // { lat, lng, image }, kept sorted north to south
-  let grassImages = [];            // loaded pictures (undefined until loaded, null if missing)
-  let grassCanvas = null;
-  let grassCtx = null;
-  let grassDpr = 1;
-
-  // 0 = none ... 10 = a lot. Anything else counts as none.
-  function getGrassAmount() {
-    const n = Number(GRASS_AMOUNT);
-    return Number.isFinite(n) ? Math.min(10, Math.max(0, n)) : 0;
-  }
-
-  // Which tufts belong on a tile. Everything comes from the tile's position, so the grass is
-  // always in the same places, and raising GRASS_AMOUNT only ADDS tufts.
-  function getGrassPatchesForTile(gridX, gridY) {
-    const perTile = getGrassAmount() * Math.max(0, Number(GRASS_PATCHES_PER_LEVEL) || 0);
-    if (perTile <= 0) return [];
-
-    const chance = Math.min(1, perTile / GRASS_PATCH_SLOTS);   // average tufts per tile = perTile
-    const patches = [];
-
-    for (let k = 0; k < GRASS_PATCH_SLOTS; k++) {
-      if (getItemPlacementScore(gridX, gridY, `grass_${k}_show`) >= chance) continue;
-
-      const fx = 0.04 + 0.92 * getItemPlacementScore(gridX, gridY, `grass_${k}_x`);
-      const fy = 0.04 + 0.92 * getItemPlacementScore(gridX, gridY, `grass_${k}_y`);
-      const pick = getItemPlacementScore(gridX, gridY, `grass_${k}_img`);
-      const index = Math.min(GRASS_IMAGES.length - 1, Math.floor(pick * GRASS_IMAGES.length));
-
-      patches.push({ fx, fy, index, image: GRASS_IMAGES[index] });
-    }
-
-    return patches;
-  }
-
-  function resizeGrassCanvas() {
-    const el = map.getContainer();
-    const w = el.clientWidth;
-    const h = el.clientHeight;
-
-    grassDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-    grassCanvas.style.width = `${w}px`;
-    grassCanvas.style.height = `${h}px`;
-    grassCanvas.width = Math.max(1, Math.round(w * grassDpr));
-    grassCanvas.height = Math.max(1, Math.round(h * grassDpr));
-    grassCtx.imageSmoothingEnabled = false;   // keep the pixel art crisp
-  }
-
-  function ensureGrassLayer() {
-    if (grassCanvas) return;
-
-    grassCanvas = document.createElement('canvas');
-    grassCanvas.className = 'grass-canvas';
-    map.getCanvasContainer().appendChild(grassCanvas);
-    grassCtx = grassCanvas.getContext('2d');
-    resizeGrassCanvas();
-
-    GRASS_IMAGES.forEach((src, i) => {
-      const img = new Image();
-      img.onload = () => { grassImages[i] = img; drawGrass(); };
-      img.onerror = () => { grassImages[i] = null; };   // missing picture: those tufts are skipped
-      img.src = src;
-    });
-
-    map.on('move', drawGrass);   // fires for every pan and zoom step
-    map.on('resize', () => { resizeGrassCanvas(); drawGrass(); });
-  }
-
-  function drawGrass() {
-    if (!grassCanvas || !grassCtx) return;
-
-    grassCtx.clearRect(0, 0, grassCanvas.width, grassCanvas.height);
-
-    if (grassPatches.length === 0 || map.getZoom() < GRASS_MIN_ZOOM) return;
-
-    // Only draw what is on screen (plus a margin).
-    const b = map.getBounds();
-    const margin = 0.00008;   // about 35 px, so tufts at the screen edge are not cut off
-    const north = b.getNorth() + margin;
-    const south = b.getSouth() - margin;
-    const west = b.getWest() - margin;
-    const east = b.getEast() + margin;
-
-    for (const p of grassPatches) {         // sorted north to south
-      if (p.lat > north) continue;
-      if (p.lat < south) break;             // everything after this is further south
-      if (p.lng < west || p.lng > east) continue;
-
-      const img = grassImages[p.image];
-      if (!img) continue;
-
-      const pt = map.project([p.lng, p.lat]);
-      const w = img.width;
-      const h = img.height;
-
-      grassCtx.drawImage(
-        img,
-        Math.round((pt.x - w / 2) * grassDpr),
-        Math.round((pt.y - h / 2) * grassDpr),
-        Math.round(w * grassDpr),
-        Math.round(h * grassDpr)
-      );
-    }
-  }
-
-  function spawnGrass(cells) {
-    if (getGrassAmount() <= 0 || !(Number(GRASS_PATCHES_PER_LEVEL) > 0)) {
-      grassPatches = [];
-      drawGrass();
-      return;
-    }
-
-    ensureGrassLayer();
-
-    const patches = [];
-
-    for (const cell of cells) {
-      for (const patch of getGrassPatchesForTile(cell.gridX, cell.gridY)) {
-        const { lat, lng } = gridToLatLng(cell.gridX + patch.fx, cell.gridY + patch.fy);
-        patches.push({ lat, lng, image: patch.index });
-      }
-    }
-
-    // North first, so tufts further south are drawn on top of the ones behind them.
-    patches.sort((a, b) => b.lat - a.lat);
-
-    grassPatches = patches;
-    drawGrass();
-  }
-
-  function clearGrass() {
-    grassPatches = [];
-    drawGrass();
-  }
-
   function clearItems() {
     activeItemNodes.forEach(node => node.marker.remove());
     activeItemNodes = [];
-    clearGrass();
   }
   
   function removeItemsFromClaimedPlots() {
@@ -1160,16 +1008,6 @@
       return hash - Math.floor(hash);
   }
   
-  // Which picture this tile's resource uses. A type can list several `mainImages`;
-  // the choice comes from the tile's position, so a given tree always looks the same.
-  function pickMainImage(def, gridX, gridY) {
-    const options = (def.mainImages && def.mainImages.length) ? def.mainImages : [def.mainImage];
-    if (options.length === 1) return options[0];
-
-    const r = getItemPlacementScore(gridX, gridY, `${def.id}_look`);
-    return options[Math.min(options.length - 1, Math.floor(r * options.length))];
-  }
-
   function getItemStorageKey(itemDef, tileKey) {
     return `${itemDef.id}_${tileKey}`;
   }
@@ -1259,9 +1097,6 @@
           }
       }
   
-      // Decorative grass first, so it is drawn underneath everything else.
-      spawnGrass(candidateCells);
-
       // Each tile independently determines whether it contains a resource.
       for (const cell of candidateCells) {
   
@@ -1293,7 +1128,6 @@
           if (!selectedDef) continue;
   
           const def = selectedDef;
-          const mainImage = pickMainImage(def, cell.gridX, cell.gridY);
   
           const { lat: itemLat, lng: itemLng } =
               gridToLatLng(cell.gridX + 0.50, cell.gridY + 0.50);
@@ -1315,7 +1149,7 @@
                   img.style.display = 'none';
               }
           } else {
-              img.src = mainImage;
+              img.src = def.mainImage;
           }
   
           container.appendChild(img);
@@ -1337,8 +1171,7 @@
               marker,
               element: container,
               img,
-              isCollected,
-              mainImage
+              isCollected
           };
   
           if (isCollected) {
@@ -1346,15 +1179,6 @@
           }
   
           activeItemNodes.push(node);
-
-          // If an alternate picture (e.g. tree2.png) is missing, use the normal one
-          // so the resource never turns invisible.
-          img.onerror = () => {
-              if (mainImage !== def.mainImage && node.mainImage === mainImage) {
-                  node.mainImage = def.mainImage;
-                  if (img.getAttribute('src') === mainImage) img.src = def.mainImage;
-              }
-          };
   
           container.addEventListener('click', e => {
               e.stopPropagation();
@@ -1515,8 +1339,6 @@
   
   function updateItemVisibility() {
     const zoom = map.getZoom();
-
-    drawGrass();
   
     activeItemNodes.forEach(node => {
       const def = node.def;
@@ -1537,7 +1359,7 @@
   
       node.element.style.display = 'flex';
   
-      const wantedSrc = isZoomedOut ? def.zoomImage : node.mainImage;
+      const wantedSrc = isZoomedOut ? def.zoomImage : def.mainImage;
       if (node.img.getAttribute('src') !== wantedSrc) node.img.src = wantedSrc;
     });
   }
