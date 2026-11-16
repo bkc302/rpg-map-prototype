@@ -446,6 +446,7 @@
     tree: {
       id: 'tree',
       name: 'Tree',
+      blockRadiusFeet: 36,   // walkers keep this far from its center
       resourceName: 'Wood',
   
       mainImage: 'tree.png',
@@ -470,6 +471,7 @@
     stone: {
       id: 'stone',
       name: 'Stone',
+      blockRadiusFeet: 18,   // walkers keep this far from its center
       resourceName: 'Stone',
     
       mainImage: 'stone.png',
@@ -494,6 +496,7 @@
     copper: {
       id: 'copper',
       name: 'Copper',
+      blockRadiusFeet: 18,   // walkers keep this far from its center
       resourceName: 'Copper Ore',
     
       mainImage: 'copper_node.png',
@@ -518,6 +521,7 @@
     tin: {
       id: 'tin',
       name: 'Tin',
+      blockRadiusFeet: 18,   // walkers keep this far from its center
       resourceName: 'Tin Ore',
     
       mainImage: 'tin_node.png',
@@ -542,6 +546,7 @@
     iron: {
       id: 'iron',
       name: 'Iron',
+      blockRadiusFeet: 18,   // walkers keep this far from its center
       resourceName: 'Iron Ore',
     
       mainImage: 'iron_node.png',
@@ -1131,6 +1136,7 @@
   
           const { lat: itemLat, lng: itemLng } =
               gridToLatLng(cell.gridX + 0.50, cell.gridY + 0.50);
+          const itemXY = projectLatLng(itemLat, itemLng);
   
           // Check whether this exact resource on this exact tile
           // is currently collected.
@@ -1168,6 +1174,8 @@
               tileKey,
               lat: itemLat,
               lng: itemLng,
+              x: itemXY.x,
+              y: itemXY.y,
               marker,
               element: container,
               img,
@@ -1541,8 +1549,13 @@
       const targetGridX = gridX + offsetX;
       const targetGridY = gridY + offsetY;
   
-      const { lat: npcLat, lng: npcLng } =
-          gridToLatLng(targetGridX + def.offsetX, targetGridY + def.offsetY);
+      const wanted = gridToLatLng(targetGridX + def.offsetX, targetGridY + def.offsetY);
+
+      // Never appear on top of a tree, stone or building.
+      const mv = getNpcMovement(def);
+      const wantedXY = projectLatLng(wanted.lat, wanted.lng);
+      const safeXY = pushOutOfObstacles(wantedXY.x, wantedXY.y, mv.walkRadiusFeet * FEET_TO_M, getWalkObstacles());
+      const { lat: npcLat, lng: npcLng } = unprojectXY(safeXY.x, safeXY.y);
   
       const container = document.createElement("div");
       container.className = "npc-marker-container";
@@ -1571,7 +1584,15 @@
               .addTo(map);
       }
   
-      npcNodes[def.id] = { lat: npcLat, lng: npcLng, marker, indicatorEl, indicatorMarker };
+      npcNodes[def.id] = {
+          lat: npcLat, lng: npcLng,
+          x: safeXY.x, y: safeXY.y,
+          homeX: safeXY.x, homeY: safeXY.y,      // they wander around where they appeared
+          state: 'idle',
+          idleUntil: Date.now() + randRange(2000, 6000),
+          path: null,
+          marker, indicatorEl, indicatorMarker
+      };
   
       if (def.quests) {
           updateQuestIndicator(def);
@@ -1587,40 +1608,35 @@
       });
   }
 
-  function moveNPC(def) {
-      const node = npcNodes[def.id];
-      if (!node || !userLat || !userLng) return;
-  
-      const dist = getDistanceFeet(userLat, userLng, node.lat, node.lng);
-      if (dist <= def.talkRadius + 50) {
-          return;
-      }
-  
-      const { gridX, gridY } = latLngToGrid(userLat, userLng);
-      const radius = def.spawnRadius;
-  
-      const { gridX: currentGridX, gridY: currentGridY } = latLngToGrid(node.lat, node.lng);
-  
-      const offsetX = Math.floor(Math.random() * 3) - 1;
-      const offsetY = Math.floor(Math.random() * 3) - 1;
-  
-      let newGridX = Math.max(gridX - radius, Math.min(gridX + radius, currentGridX + offsetX));
-      let newGridY = Math.max(gridY - radius, Math.min(gridY + radius, currentGridY + offsetY));
-  
-      const moved = gridToLatLng(newGridX + def.offsetX, newGridY + def.offsetY);
-      node.lat = moved.lat;
-      node.lng = moved.lng;
-  
-      node.marker.setLngLat([node.lng, node.lat]);
-      if (node.indicatorMarker) {
-          node.indicatorMarker.setLngLat([node.lng, node.lat]);
-      }
-  
-      const infoElem = document.getElementById("plot-info");
-      if (infoElem && infoElem.innerText.includes(def.name)) {
-          renderNPCCard(def);
+  let lastNpcTick = 0;
+  let npcMoveInterval = null;
+
+  // NPCs wander like monsters: walk smoothly, stand still for a while, walk again,
+  // around trees, stones and buildings. They stand still while you are talking to them.
+  function moveNPCs() {
+      const now = Date.now();
+      const dt = Math.min(0.5, (now - (lastNpcTick || now)) / 1000);
+      lastNpcTick = now;
+
+      const obstacles = getWalkObstacles();
+
+      for (const def of [...Object.values(NPC_DEFS), ...Object.values(QUEST_NPC_DEFS)]) {
+          const node = npcNodes[def.id];
+          if (!node || !node.marker) continue;
+
+          if (activeTarget && activeTarget.node === node) continue;
+
+          if (updateWalker(node, getNpcMovement(def), dt, now, obstacles)) {
+              const ll = unprojectXY(node.x, node.y);
+              node.lat = ll.lat;
+              node.lng = ll.lng;
+
+              node.marker.setLngLat([ll.lng, ll.lat]);
+              if (node.indicatorMarker) node.indicatorMarker.setLngLat([ll.lng, ll.lat]);
+          }
       }
   }
+
   
   function checkNPCProximity(def) {
       const node = npcNodes[def.id];
@@ -1636,16 +1652,8 @@
   }
   
   function initNPCMovement() {
-      const FOUR_MINUTES_MS = 4 * 60 * 1000;
-  
-      setInterval(() => {
-          for (const key in NPC_DEFS) {
-              moveNPC(NPC_DEFS[key]);
-          }
-          for (const key in QUEST_NPC_DEFS) {
-              moveNPC(QUEST_NPC_DEFS[key]);
-          }
-      }, FOUR_MINUTES_MS);
+      if (npcMoveInterval) return;
+      npcMoveInterval = setInterval(moveNPCs, 100);
   }
 
   function renderNPCCard(def) {
@@ -2355,7 +2363,8 @@
     wanderMinFeet: 30,
     wanderMaxFeet: 120,
     idleMinMs: 3000,
-    idleMaxMs: 9000
+    idleMaxMs: 9000,
+    walkRadiusFeet: 10
   };
 
   // `image` is the picture used on the map (color/borderColor are the fallback square).
@@ -2537,6 +2546,263 @@
     setTimeout(() => popupMarker.remove(), 1200);
   }
 
+  // =====================================================================
+  // WALKING: smooth wandering that goes AROUND trees, stones, buildings...
+  // Used by both NPCs and monsters.
+  // =====================================================================
+  const NPC_MOVEMENT = {
+    speedFeetPerSec: 2,
+    wanderMinFeet: 20,
+    wanderMaxFeet: 80,
+    idleMinMs: 4000,
+    idleMaxMs: 12000,
+    leashFeet: 150,        // NPCs stay within this distance of where they appeared
+    walkRadiusFeet: 10     // how much room a walker needs around itself
+  };
+
+  function getNpcMovement(def) {
+    return { ...NPC_MOVEMENT, ...(def.movement || {}) };
+  }
+
+  const WALK_MARGIN_M = 0.05;
+
+  // Everything walkers must keep away from, as circles { x, y, r } in meters.
+  function getWalkObstacles() {
+    const list = [];
+
+    for (const node of activeItemNodes) {
+      const full = node.def.blockRadiusFeet || 0;
+      if (!full || node.x === undefined) continue;
+
+      // A collected tree is only a small stump; collected ores are gone.
+      const feet = node.isCollected ? (node.def.collectedImage ? full * 0.4 : 0) : full;
+      if (feet > 0) list.push({ x: node.x, y: node.y, r: feet * FEET_TO_M });
+    }
+
+    for (const plotId in buildingNodes) {
+      const b = buildingNodes[plotId];
+      if (!b || !b.def || b.x === undefined) continue;
+      list.push({ x: b.x, y: b.y, r: Math.max(b.def.width, b.def.height) * 0.4 * FEET_TO_M });
+    }
+
+    return list;
+  }
+
+  function segmentInfo(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+
+    let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+
+    return { dist: Math.hypot(px - (ax + dx * t), py - (ay + dy * t)), t };
+  }
+
+  // The obstacle a straight walk from A to B would run into first (or null).
+  function findBlocker(ax, ay, bx, by, obstacles, r) {
+    let best = null;
+    let bestT = Infinity;
+
+    for (const o of obstacles) {
+      const s = segmentInfo(o.x, o.y, ax, ay, bx, by);
+      if (s.dist < o.r + r - WALK_MARGIN_M && s.t < bestT) {
+        best = o;
+        bestT = s.t;
+      }
+    }
+
+    return best;
+  }
+
+  function pointBlocked(x, y, obstacles, r) {
+    for (const o of obstacles) {
+      if (Math.hypot(x - o.x, y - o.y) < o.r + r - WALK_MARGIN_M) return true;
+    }
+    return false;
+  }
+
+  // If a point is inside an obstacle, move it to the nearest free spot.
+  function pushOutOfObstacles(x, y, r, obstacles) {
+    for (let pass = 0; pass < 4; pass++) {
+      let moved = false;
+
+      for (const o of obstacles) {
+        let dx = x - o.x;
+        let dy = y - o.y;
+        let d = Math.hypot(dx, dy);
+
+        if (d < o.r + r - WALK_MARGIN_M) {
+          if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
+          const need = o.r + r + 0.1;
+          x = o.x + (dx / d) * need;
+          y = o.y + (dy / d) * need;
+          moved = true;
+        }
+      }
+
+      if (!moved) break;
+    }
+
+    return { x, y };
+  }
+
+  // A list of waypoints from A to B that goes around whatever is in the way (or null).
+  // If the straight line is blocked it tries a detour on each side of the obstacle.
+  function findPath(ax, ay, bx, by, obstacles, r, depth = 0) {
+    const hit = findBlocker(ax, ay, bx, by, obstacles, r);
+    if (!hit) return [{ x: bx, y: by }];
+    if (depth >= 4) return null;
+
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return null;
+
+    const nx = -dy / len;
+    const ny = dx / len;
+    const viaDist = (hit.r + r) * 1.2 + 0.3;
+
+    let best = null;
+    let bestLen = Infinity;
+
+    for (const side of [1, -1]) {
+      const via = { x: hit.x + nx * viaDist * side, y: hit.y + ny * viaDist * side };
+      if (pointBlocked(via.x, via.y, obstacles, r)) continue;
+
+      const first = findPath(ax, ay, via.x, via.y, obstacles, r, depth + 1);
+      if (!first) continue;
+      const second = findPath(via.x, via.y, bx, by, obstacles, r, depth + 1);
+      if (!second) continue;
+
+      const path = first.concat(second);
+      const total = pathLength(ax, ay, path);
+
+      if (total < bestLen) {
+        best = path;
+        bestLen = total;
+      }
+    }
+
+    return best;
+  }
+
+  function pathLength(ax, ay, path) {
+    let total = 0;
+    let px = ax;
+    let py = ay;
+
+    for (const w of path) {
+      total += Math.hypot(w.x - px, w.y - py);
+      px = w.x;
+      py = w.y;
+    }
+
+    return total;
+  }
+
+  // Picks somewhere nearby to walk to, and a route there that avoids obstacles.
+  function pickDestination(node, mv, obstacles, r) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const d = randRange(mv.wanderMinFeet, mv.wanderMaxFeet) * FEET_TO_M;
+      const tx = node.x + Math.cos(angle) * d;
+      const ty = node.y + Math.sin(angle) * d;
+
+      // NPCs don't wander far from where they appeared.
+      if (mv.leashFeet && node.homeX !== undefined &&
+          Math.hypot(tx - node.homeX, ty - node.homeY) > mv.leashFeet * FEET_TO_M) continue;
+
+      if (pointBlocked(tx, ty, obstacles, r)) continue;
+
+      const path = findPath(node.x, node.y, tx, ty, obstacles, r);
+      if (!path) continue;
+
+      // Skip silly detours.
+      if (pathLength(node.x, node.y, path) > d * 2.5 + 5) continue;
+
+      return path;
+    }
+
+    return null;
+  }
+
+  // One step of walking: wait, pick a destination, then follow the route to it.
+  // Returns true if the walker moved.
+  function updateWalker(node, mv, dt, now, obstacles) {
+    const r = (mv.walkRadiusFeet || 0) * FEET_TO_M;
+    let moved = false;
+
+    // Something may have appeared on top of us (a tree grew back, a building was placed).
+    if (pointBlocked(node.x, node.y, obstacles, r)) {
+      const out = pushOutOfObstacles(node.x, node.y, r, obstacles);
+      node.x = out.x;
+      node.y = out.y;
+      node.path = null;
+      node.state = 'idle';
+      node.idleUntil = now + 500;
+      moved = true;
+    }
+
+    if (node.state === 'idle') {
+      if (now < node.idleUntil) return moved;
+
+      const path = pickDestination(node, mv, obstacles, r);
+      if (!path) {
+        node.idleUntil = now + randRange(mv.idleMinMs, mv.idleMaxMs) / 2;
+        return moved;
+      }
+
+      node.path = path;
+      node.state = 'walking';
+    }
+
+    if (!node.path || node.path.length === 0) {
+      node.state = 'idle';
+      node.idleUntil = now + randRange(mv.idleMinMs, mv.idleMaxMs);
+      return moved;
+    }
+
+    const prevX = node.x;
+    const prevY = node.y;
+    let step = mv.speedFeetPerSec * FEET_TO_M * dt;
+
+    while (step > 0 && node.path.length > 0) {
+      const w = node.path[0];
+      const dx = w.x - node.x;
+      const dy = w.y - node.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist <= step) {
+        node.x = w.x;
+        node.y = w.y;
+        step -= dist;
+        node.path.shift();
+      } else {
+        node.x += (dx / dist) * step;
+        node.y += (dy / dist) * step;
+        step = 0;
+      }
+    }
+
+    // A new obstacle appeared in our way: don't walk into it, work out a new route later.
+    if (pointBlocked(node.x, node.y, obstacles, r)) {
+      node.x = prevX;
+      node.y = prevY;
+      node.path = null;
+      node.state = 'idle';
+      node.idleUntil = now + 500;
+      return false;
+    }
+
+    if (node.path.length === 0) {
+      node.state = 'idle';
+      node.idleUntil = now + randRange(mv.idleMinMs, mv.idleMaxMs);
+    }
+
+    return node.x !== prevX || node.y !== prevY || moved;
+  }
+
   // ---------- monsters on the map ----------
   let monsterNodes = [];
   let monsterMoveInterval = null;
@@ -2624,8 +2890,13 @@
     const p = projectLatLng(userLat, userLng);
     const angle = Math.random() * Math.PI * 2;
     const dist = randRange(COMBAT.spawnMinFeet, COMBAT.spawnMaxFeet) * FEET_TO_M;
-    const x = p.x + Math.cos(angle) * dist;
-    const y = p.y + Math.sin(angle) * dist;
+    // Never appear on top of a tree, stone or building.
+    const { x, y } = pushOutOfObstacles(
+      p.x + Math.cos(angle) * dist,
+      p.y + Math.sin(angle) * dist,
+      def.walkRadiusFeet * FEET_TO_M,
+      getWalkObstacles()
+    );
     const ll = unprojectXY(x, y);
 
     const parts = createMonsterElement(def);
@@ -2643,7 +2914,7 @@
       hp: def.endurance,
       state: 'idle',
       idleUntil: Date.now() + randRange(def.idleMinMs, def.idleMaxMs),
-      target: null,
+      path: null,
       engaged: false,
       marker,
       element: parts.container,
@@ -2679,10 +2950,13 @@
   }
 
   // Monsters wander: walk smoothly to a nearby spot, stand still for a while, repeat.
+  // They walk around trees, stones and buildings.
   function moveMonsters() {
     const now = Date.now();
     const dt = Math.min(0.5, (now - (lastMoveTick || now)) / 1000);
     lastMoveTick = now;
+
+    const obstacles = getWalkObstacles();
 
     for (let i = monsterNodes.length - 1; i >= 0; i--) {
       const node = monsterNodes[i];
@@ -2696,37 +2970,12 @@
 
       if (node.engaged) continue; // fighting: stand still
 
-      const def = node.def;
-
-      if (node.state === 'idle') {
-        if (now >= node.idleUntil) {
-          const angle = Math.random() * Math.PI * 2;
-          const d = randRange(def.wanderMinFeet, def.wanderMaxFeet) * FEET_TO_M;
-          node.target = { x: node.x + Math.cos(angle) * d, y: node.y + Math.sin(angle) * d };
-          node.state = 'walking';
-        }
-        continue;
+      if (updateWalker(node, node.def, dt, now, obstacles)) {
+        const ll = unprojectXY(node.x, node.y);
+        node.lat = ll.lat;
+        node.lng = ll.lng;
+        node.marker.setLngLat([ll.lng, ll.lat]);
       }
-
-      const dx = node.target.x - node.x;
-      const dy = node.target.y - node.y;
-      const dist = Math.hypot(dx, dy);
-      const step = def.speedFeetPerSec * FEET_TO_M * dt;
-
-      if (dist <= step) {
-        node.x = node.target.x;
-        node.y = node.target.y;
-        node.state = 'idle';
-        node.idleUntil = now + randRange(def.idleMinMs, def.idleMaxMs);
-      } else {
-        node.x += (dx / dist) * step;
-        node.y += (dy / dist) * step;
-      }
-
-      const ll = unprojectXY(node.x, node.y);
-      node.lat = ll.lat;
-      node.lng = ll.lng;
-      node.marker.setLngLat([ll.lng, ll.lat]);
     }
   }
 
@@ -3552,7 +3801,8 @@
       .setLngLat([buildingLng, buildingLat])
       .addTo(map);
   
-    buildingNodes[plotId] = { lat: buildingLat, lng: buildingLng, marker, def, plotId };
+    const buildingXY = projectLatLng(buildingLat, buildingLng);
+    buildingNodes[plotId] = { lat: buildingLat, lng: buildingLng, x: buildingXY.x, y: buildingXY.y, marker, def, plotId };
   
     container.addEventListener('click', (e) => {
       e.stopPropagation();
