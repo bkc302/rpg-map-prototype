@@ -590,16 +590,16 @@
       id: 'small_house',
       name: 'Small House',
       image: 'small_house.png',
-      width: 168,
-      height: 108,
+      width: 138,
+      height: 102,
       costs: { Wood: 30, Stone: 15 }
     },
     medium_house: {
       id: 'medium_house',
       name: 'Medium House',
       image: 'medium_house.png',
-      width: 288,
-      height: 240,
+      width: 168,
+      height: 108,
       costs: { Wood: 70, Stone: 40, 'Copper Ingot': 5 }
     },
     large_house: {
