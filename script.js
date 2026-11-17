@@ -3740,7 +3740,8 @@
   
       html += `
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-          <img src="${def.image}" width="${def.width}" height="${def.height}" style="image-rendering: pixelated;" />
+          <img src="${def.image}"
+			style="width:64px; height:64px; object-fit:contain; image-rendering:pixelated;" />
           <div style="flex:1;">
             <b>${def.name}</b><br/>
             <small>Requires: ${costText}</small><br/>
