@@ -585,6 +585,35 @@
       width: 96,
       height: 96,
       costs: { Stone: 15, 'Iron Ore': 5 }
+    },
+    small_house: {
+      id: 'small_house',
+      name: 'Small House',
+      image: 'small_house.png',
+      width: 192,
+      height: 216,
+      costs: { Wood: 30, Stone: 15 }
+    },
+    medium_house: {
+      id: 'medium_house',
+      name: 'Medium House',
+      image: 'medium_house.png',
+      width: 288,
+      height: 240,
+      costs: { Wood: 70, Stone: 40, 'Copper Ingot': 5 }
+    },
+    large_house: {
+      id: 'large_house',
+      name: 'Large House',
+      image: 'large_house.png',
+      width: 384,
+      height: 240,
+      costs: {
+        Wood: 120,
+        Stone: 75,
+        'Bronze Ingot': 5,
+        'Iron Ingot': 3
+      }
     }
   };
   
