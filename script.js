@@ -590,8 +590,8 @@
       id: 'small_house',
       name: 'Small House',
       image: 'small_house.png',
-      width: 192,
-      height: 216,
+      width: 168,
+      height: 108,
       costs: { Wood: 30, Stone: 15 }
     },
     medium_house: {
@@ -606,8 +606,8 @@
       id: 'large_house',
       name: 'Large House',
       image: 'large_house.png',
-      width: 384,
-      height: 240,
+      width: 192,
+      height: 204,
       costs: {
         Wood: 120,
         Stone: 75,
