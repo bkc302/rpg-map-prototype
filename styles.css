@@ -945,6 +945,7 @@
     .monster-img {
       display: block;
       image-rendering: pixelated;
+      filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));   /* same shadow as the NPCs and player */
     }
 
     .monster-marker-container.engaged .monster-body {
@@ -952,7 +953,8 @@
     }
 
     .monster-marker-container.engaged .monster-img {
-      filter: drop-shadow(0 0 3px #fbbf24);
+      /* keep the normal shadow and add the gold glow for the fight */
+      filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 3px #fbbf24);
     }
 
     .monster-hp {
@@ -1078,7 +1080,7 @@
     .monster-level {
       position: absolute;
       left: 50%;
-      bottom: -7px;
+      bottom: -22px;   /* just below the shadow, so the badge doesn't cover it */
       transform: translateX(-50%);
       padding: 0 4px;
       border: 1px solid #000000;

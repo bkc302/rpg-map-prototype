@@ -2386,7 +2386,7 @@
 
     goblinRaider: {
       id: 'goblinRaider', family: 'goblin', name: 'Goblin Raider', level: 3,
-      image: 'goblin.png', color: '#a16207', borderColor: '#422006', size: 48,
+      image: 'goblinRaider.png', color: '#a16207', borderColor: '#422006', size: 48,
       combatSkill: 10, endurance: 38, xp: 80,
       drops: [
         { type: 'gold', min: 12, max: 25, chance: 0.85 },
@@ -2399,7 +2399,7 @@
 
     goblinBrute: {
       id: 'goblinBrute', family: 'goblin', name: 'Goblin Brute', level: 5,
-      image: 'goblin.png', color: '#991b1b', borderColor: '#450a0a', size: 48,
+      image: 'goblinBrute.png', color: '#991b1b', borderColor: '#450a0a', size: 48,
       combatSkill: 12, endurance: 46, xp: 320,
       drops: [
         { type: 'gold', min: 25, max: 45, chance: 0.9 },
@@ -2422,7 +2422,7 @@
     defeatHp: 1,                             // HP you are left with after losing (there is no death)
     hpRegenMs: 10000,                        // 1 HP back every this many ms (not while fighting)
 
-    maxMonsters: 3,
+    maxMonsters: 8,
     spawnMinFeet: 250,
     spawnMaxFeet: 600,
     despawnFeet: 1000,
