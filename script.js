@@ -574,6 +574,7 @@
       id: 'workbench',
       name: 'Workbench',
       image: 'workbench.png',
+	  zoomThreshold: 17.75,
       width: 52,
       height: 52,
       costs: { Wood: 10, Stone: 5 }
@@ -582,6 +583,7 @@
       id: 'forge',
       name: 'Forge',
       image: 'forge.png',
+	  zoomThreshold: 17.75,
       width: 96,
       height: 96,
       costs: { Stone: 15, 'Iron Ore': 5 }
@@ -590,6 +592,7 @@
       id: 'small_house',
       name: 'Small House',
       image: 'small_house.png',
+	  zoomThreshold: 17.75,
       width: 138,
       height: 102,
       costs: { Wood: 30, Stone: 15 }
@@ -598,6 +601,7 @@
       id: 'medium_house',
       name: 'Medium House',
       image: 'medium_house.png',
+	  zoomThreshold: 17.75,
       width: 168,
       height: 108,
       costs: { Wood: 70, Stone: 40, 'Copper Ingot': 5 }
@@ -606,6 +610,7 @@
       id: 'large_house',
       name: 'Large House',
       image: 'large_house.png',
+	  zoomThreshold: 17.75,
       width: 192,
       height: 204,
       costs: {
@@ -1376,6 +1381,12 @@
   
   function updateItemVisibility() {
     const zoom = map.getZoom();
+	
+    for (const plotId in buildingNodes) {
+      const b = buildingNodes[plotId];
+      if (!b || !b.element) continue;
+      b.element.style.display = zoom < b.def.zoomThreshold ? 'none' : '';
+    }
   
     activeItemNodes.forEach(node => {
       const def = node.def;
@@ -3832,7 +3843,7 @@
       .addTo(map);
   
     const buildingXY = projectLatLng(buildingLat, buildingLng);
-    buildingNodes[plotId] = { lat: buildingLat, lng: buildingLng, x: buildingXY.x, y: buildingXY.y, marker, def, plotId };
+    buildingNodes[plotId] = { lat: buildingLat, lng: buildingLng, x: buildingXY.x, y: buildingXY.y, marker, def, plotId, element: container };
   
     container.addEventListener('click', (e) => {
       e.stopPropagation();
