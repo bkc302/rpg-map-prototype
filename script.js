@@ -594,7 +594,7 @@
       image: 'small_house.png',
 	  zoomThreshold: 17.75,
       width: 138,
-      height: 102,
+      height: 96,
       costs: { Wood: 30, Stone: 15 }
     },
     medium_house: {
@@ -602,8 +602,8 @@
       name: 'Medium House',
       image: 'medium_house.png',
 	  zoomThreshold: 17.75,
-      width: 168,
-      height: 108,
+      width: 150,
+      height: 159,
       costs: { Wood: 70, Stone: 40, 'Copper Ingot': 5 }
     },
     large_house: {
@@ -611,8 +611,8 @@
       name: 'Large House',
       image: 'large_house.png',
 	  zoomThreshold: 17.75,
-      width: 192,
-      height: 204,
+      width: 174,
+      height: 198,
       costs: {
         Wood: 120,
         Stone: 75,
